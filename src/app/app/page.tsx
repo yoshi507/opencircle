@@ -1,6 +1,11 @@
-import { MessageCircle, Plus, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { getMyServers } from "@/app/actions/servers";
+import { MessageCircle, Plus, Hash } from "lucide-react";
+import { CreateServerButton } from "@/components/create-server-button";
 
-export default function AppHomePage() {
+export default async function AppHomePage() {
+  const servers = await getMyServers();
+
   return (
     <div className="flex-1 flex flex-col">
       <header className="h-12 px-4 flex items-center border-b border-border bg-card/30">
@@ -10,68 +15,68 @@ export default function AppHomePage() {
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-2xl mx-auto space-y-8">
           <div>
-            <h2 className="text-2xl font-bold mb-2">
-              Welcome to OpenCircle 👋
-            </h2>
+            <h2 className="text-2xl font-bold mb-2">Welcome back 👋</h2>
             <p className="text-muted-foreground">
-              Milestone 0 is live. Authentication, profiles and the app shell
-              are ready. Next up: servers, channels and realtime messaging.
+              Create a server or jump into one of your communities.
             </p>
           </div>
 
-          <div className="grid gap-4">
-            <div className="p-5 rounded-xl border border-border bg-card">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
-                  <Plus className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-1">Create your first server</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Coming in Milestone 1 — create communities, invite friends
-                    and start chatting.
-                  </p>
-                  <button
-                    disabled
-                    className="text-sm px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground cursor-not-allowed"
+          {servers.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                Your servers
+              </h3>
+              <div className="grid gap-2">
+                {servers.map((server: any) => (
+                  <Link
+                    key={server.id}
+                    href={`/app/servers/${server.id}`}
+                    className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors"
                   >
-                    Coming soon
-                  </button>
-                </div>
+                    <div className="w-10 h-10 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-bold">
+                      {server.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{server.name}</p>
+                      {server.description && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {server.description}
+                        </p>
+                      )}
+                    </div>
+                  </Link>
+                ))}
               </div>
             </div>
+          )}
 
-            <div className="p-5 rounded-xl border border-border bg-card">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
-                  <MessageCircle className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-1">Direct messages</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Private conversations with friends will appear here.
-                  </p>
-                </div>
+          <div className="p-5 rounded-xl border border-border bg-card">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                <Plus className="w-5 h-5" />
               </div>
-            </div>
-
-            <div className="p-5 rounded-xl border border-dashed border-primary/30 bg-primary/5">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/20 text-primary flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-1">What&apos;s next?</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Milestone 1: profiles, server creation, text channels,
-                    roles, realtime messages and DMs.
-                  </p>
+              <div className="flex-1">
+                <h3 className="font-semibold mb-1">Create a server</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Start a new community and invite your friends.
+                </p>
+                <div className="inline-block">
+                  {/* The button opens a modal */}
+                  <CreateServerHomeTrigger />
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CreateServerHomeTrigger() {
+  return (
+    <div className="[&>button]:w-auto [&>button]:h-auto [&>button]:rounded-lg [&>button]:px-4 [&>button]:py-2 [&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:hover:bg-primary/90 [&>button]:text-sm [&>button]:font-medium">
+      <CreateServerButton />
     </div>
   );
 }
