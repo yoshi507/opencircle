@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMessages } from "@/app/actions/messages";
+import { getServerMembers } from "@/app/actions/invites";
 import { MessageList } from "@/components/message-list";
 import { MessageComposer } from "@/components/message-composer";
 import { InviteButton } from "@/components/invite-button";
+import { CreateChannelButton } from "@/components/create-channel-button";
+import { MembersPanel } from "@/components/members-panel";
 import { Hash } from "lucide-react";
 
 export default async function ChannelPage({
@@ -30,9 +33,7 @@ export default async function ChannelPage({
   if (!membership) {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
-        <p className="text-muted-foreground">
-          You are not a member of this server.
-        </p>
+        <p className="text-muted-foreground">You are not a member of this server.</p>
       </div>
     );
   }
@@ -52,27 +53,44 @@ export default async function ChannelPage({
     );
   }
 
-  // Check if current user is owner (for invite button)
   const { data: server } = await supabase
     .from("servers")
-    .select("owner_id")
+    .select("owner_id, name")
     .eq("id", serverId)
     .maybeSingle();
 
   const isOwner = server?.owner_id === user.id;
-
   const messages = await getMessages(channelId);
+  const members = await getServerMembers(serverId);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <header className="h-12 px-4 flex items-center gap-2 border-b border-border bg-card/30 shrink-0">
-        <Hash className="w-5 h-5 text-muted-foreground" />
-        <h1 className="font-semibold flex-1 truncate">{channel.name}</h1>
-        {isOwner && <InviteButton serverId={serverId} />}
-      </header>
+    <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-12 px-4 flex items-center gap-2 border-b border-border bg-card/30 shrink-0">
+          <Hash className="w-5 h-5 text-muted-foreground" />
+          <h1 className="font-semibold flex-1 truncate">{channel.name}</h1>
+          {isOwner && (
+            <div className="flex items-center gap-2">
+              <CreateChannelButton serverId={serverId} />
+              <InviteButton serverId={serverId} />
+            </div>
+          )}
+        </header>
 
-      <MessageList channelId={channelId} initialMessages={messages} />
-      <MessageComposer channelId={channelId} />
+        <MessageList
+          channelId={channelId}
+          initialMessages={messages}
+          currentUserId={user.id}
+        />
+        <MessageComposer channelId={channelId} />
+      </div>
+
+      <MembersPanel
+        serverId={serverId}
+        members={members as any}
+        isOwner={isOwner}
+        currentUserId={user.id}
+      />
     </div>
   );
 }
