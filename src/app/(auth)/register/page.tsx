@@ -20,39 +20,54 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
 
-    const supabase = createClient();
+    try {
+      const supabase = createClient();
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username: username.toLowerCase().trim(),
-          display_name: username.trim(),
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            username: username.toLowerCase().trim(),
+            display_name: username.trim(),
+          },
         },
-      },
-    });
-
-    if (signUpError) {
-      setError(signUpError.message);
-      setLoading(false);
-      return;
-    }
-
-    if (data.user) {
-      await supabase.from("profiles").upsert({
-        id: data.user.id,
-        username: username.toLowerCase().trim(),
-        display_name: username.trim(),
       });
-    }
 
-    setSuccess(true);
-    setLoading(false);
+      if (signUpError) {
+        setError(signUpError.message);
+        setLoading(false);
+        return;
+      }
 
-    if (data.session) {
-      router.push("/app");
-      router.refresh();
+      // Profile is created by the database trigger. We only upsert as a fallback.
+      if (data.user) {
+        try {
+          await supabase.from("profiles").upsert({
+            id: data.user.id,
+            username: username.toLowerCase().trim(),
+            display_name: username.trim(),
+          });
+        } catch {
+          // Non-fatal — trigger should have created the row
+        }
+      }
+
+      setSuccess(true);
+      setLoading(false);
+
+      // If email confirmation is disabled, we get a session immediately
+      if (data.session) {
+        router.push("/app");
+        router.refresh();
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Check your connection and Supabase keys.";
+      setError(message);
+      setLoading(false);
     }
   }
 
@@ -63,6 +78,10 @@ export default function RegisterPage() {
         <p className="text-muted-foreground text-sm mb-6">
           We sent a confirmation link to <strong>{email}</strong>. Click it to
           activate your account.
+        </p>
+        <p className="text-xs text-muted-foreground mb-4">
+          (If nothing arrives, turn off “Confirm email” in Supabase →
+          Authentication → Providers while developing.)
         </p>
         <Link
           href="/login"
@@ -144,7 +163,7 @@ export default function RegisterPage() {
         </div>
 
         {error && (
-          <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
+          <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg whitespace-pre-wrap">
             {error}
           </div>
         )}

@@ -18,20 +18,30 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const supabase = createClient();
 
-    if (error) {
-      setError(error.message);
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (signInError) {
+        setError(signInError.message);
+        setLoading(false);
+        return;
+      }
+
+      router.push("/app");
+      router.refresh();
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Check your connection and Supabase keys.";
+      setError(message);
       setLoading(false);
-      return;
     }
-
-    router.push("/app");
-    router.refresh();
   }
 
   return (
@@ -76,7 +86,7 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
+          <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg whitespace-pre-wrap">
             {error}
           </div>
         )}
