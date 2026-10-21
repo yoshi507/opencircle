@@ -6,18 +6,11 @@ export async function updateSession(request: NextRequest) {
     request,
   });
 
-  const supabaseUrl =
-    process.env.NEXT_PUBLIC_SB_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey =
-    process.env.NEXT_PUBLIC_SB_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SB_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SB_KEY;
 
-  // If env vars are not set yet, skip auth middleware so the site still loads
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn(
-      "[OpenCircle] Missing Supabase env vars — skipping auth middleware"
-    );
+    console.warn("[OpenCircle] Missing SB_URL / SB_KEY — skipping auth middleware");
     return supabaseResponse;
   }
 

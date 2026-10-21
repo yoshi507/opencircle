@@ -4,16 +4,12 @@ import { cookies } from "next/headers";
 export async function createClient() {
   const cookieStore = await cookies();
 
-  const url =
-    process.env.NEXT_PUBLIC_SB_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key =
-    process.env.NEXT_PUBLIC_SB_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.NEXT_PUBLIC_SB_URL;
+  const key = process.env.NEXT_PUBLIC_SB_KEY;
 
   if (!url || !key) {
     throw new Error(
-      "Missing Supabase env vars. Add NEXT_PUBLIC_SB_URL and NEXT_PUBLIC_SB_KEY in Vercel."
+      "Missing SB_URL or SB_KEY. Add them in Vercel Environment Variables."
     );
   }
 
@@ -28,7 +24,7 @@ export async function createClient() {
             cookieStore.set(name, value, options);
           });
         } catch {
-          // Called from a Server Component — safe to ignore
+          // safe to ignore
         }
       },
     },
