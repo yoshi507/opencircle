@@ -12,6 +12,7 @@ import {
   Home,
   Menu,
   X,
+  Shield,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -40,9 +41,7 @@ export function AppShell({ children, user }: AppShellProps) {
       const supabase = createClient();
       const { data } = await supabase
         .from("server_members")
-        .select(
-          `server_id, servers (id, name, icon_url)`
-        )
+        .select(`server_id, servers (id, name, icon_url)`)
         .eq("user_id", user.id)
         .eq("membership_status", "active");
 
@@ -66,11 +65,12 @@ export function AppShell({ children, user }: AppShellProps) {
     user.email?.split("@")[0] ||
     "User";
 
-  const isInServer = pathname.startsWith("/app/servers/");
+  // Extract current server id from path if present
+  const serverMatch = pathname.match(/\/app\/servers\/([^/]+)/);
+  const currentServerId = serverMatch?.[1] || null;
 
   return (
     <div className="h-dvh flex flex-col md:flex-row overflow-hidden bg-background">
-      {/* MOBILE TOP BAR */}
       <header className="md:hidden h-14 flex items-center justify-between px-4 border-b border-border bg-card shrink-0">
         <button
           onClick={() => setMobileOpen(true)}
@@ -94,14 +94,12 @@ export function AppShell({ children, user }: AppShellProps) {
         />
       )}
 
-      {/* SIDEBAR */}
       <div
         className={cn(
           "fixed md:static inset-y-0 left-0 z-50 flex h-full transition-transform duration-200 ease-out",
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
-        {/* Server rail */}
         <div className="w-[72px] flex-shrink-0 bg-[#0c0c0e] flex flex-col items-center py-3 gap-2 border-r border-border overflow-y-auto">
           <Link
             href="/app"
@@ -138,7 +136,6 @@ export function AppShell({ children, user }: AppShellProps) {
           <CreateServerButton />
         </div>
 
-        {/* Nav sidebar */}
         <div className="w-60 flex-shrink-0 bg-card border-r border-border flex flex-col">
           <div className="h-12 px-4 flex items-center justify-between border-b border-border">
             <span className="font-semibold truncate">OpenCircle</span>
@@ -162,7 +159,7 @@ export function AppShell({ children, user }: AppShellProps) {
               href="/app/friends"
               icon={<Users className="w-4 h-4" />}
               label="Friends & DMs"
-              active={pathname.startsWith("/app/friends")}
+              active={pathname.startsWith("/app/friends") || pathname.startsWith("/app/dms")}
               onClick={() => setMobileOpen(false)}
             />
 
@@ -184,6 +181,16 @@ export function AppShell({ children, user }: AppShellProps) {
                   />
                 ))}
               </>
+            )}
+
+            {currentServerId && (
+              <NavItem
+                href={`/app/servers/${currentServerId}/settings`}
+                icon={<Shield className="w-4 h-4" />}
+                label="Server settings"
+                active={pathname.includes("/settings")}
+                onClick={() => setMobileOpen(false)}
+              />
             )}
           </div>
 
@@ -218,10 +225,9 @@ export function AppShell({ children, user }: AppShellProps) {
         {children}
       </main>
 
-      {/* MOBILE BOTTOM NAV */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 bg-card border-t border-border flex items-center justify-around z-30">
         <BottomNavItem href="/app" icon={<Home className="w-5 h-5" />} label="Home" active={pathname === "/app"} />
-        <BottomNavItem href="/app/friends" icon={<Users className="w-5 h-5" />} label="Friends" active={pathname.startsWith("/app/friends")} />
+        <BottomNavItem href="/app/friends" icon={<Users className="w-5 h-5" />} label="Friends" active={pathname.startsWith("/app/friends") || pathname.startsWith("/app/dms")} />
         <button onClick={() => setMobileOpen(true)} className="flex flex-col items-center gap-0.5 text-muted-foreground">
           <Hash className="w-5 h-5" />
           <span className="text-[10px]">Servers</span>
