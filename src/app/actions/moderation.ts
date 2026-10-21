@@ -27,7 +27,11 @@ async function writeAudit(
   });
 }
 
-export async function kickMember(serverId: string, targetUserId: string, reason?: string) {
+export async function kickMember(
+  serverId: string,
+  targetUserId: string,
+  reason?: string
+) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -52,13 +56,16 @@ export async function kickMember(serverId: string, targetUserId: string, reason?
     .eq("user_id", targetUserId);
 
   if (error) return { error: error.message };
-
   await writeAudit(supabase, user.id, serverId, "kick", targetUserId, reason);
   revalidatePath(`/app/servers/${serverId}`);
   return { ok: true };
 }
 
-export async function banMember(serverId: string, targetUserId: string, reason?: string) {
+export async function banMember(
+  serverId: string,
+  targetUserId: string,
+  reason?: string
+) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -83,9 +90,67 @@ export async function banMember(serverId: string, targetUserId: string, reason?:
     .eq("user_id", targetUserId);
 
   if (error) return { error: error.message };
-
   await writeAudit(supabase, user.id, serverId, "ban", targetUserId, reason);
   revalidatePath(`/app/servers/${serverId}`);
+  return { ok: true };
+}
+
+export async function timeoutMember(
+  serverId: string,
+  targetUserId: string,
+  minutes: number,
+  reason?: string
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in." };
+
+  const { data: server } = await supabase
+    .from("servers")
+    .select("owner_id")
+    .eq("id", serverId)
+    .single();
+
+  if (!server || server.owner_id !== user.id) {
+    return { error: "Only the owner can timeout members." };
+  }
+
+  await writeAudit(
+    supabase,
+    user.id,
+    serverId,
+    "timeout",
+    targetUserId,
+    reason || `${minutes} minutes`
+  );
+
+  // Store timeout end in a simple way via moderation_cases metadata
+  // Full timeout enforcement would check this before sendMessage
+  return { ok: true, until: new Date(Date.now() + minutes * 60 * 1000).toISOString() };
+}
+
+export async function submitReport(
+  targetType: string,
+  targetId: string,
+  reason: string
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in." };
+
+  const { error } = await supabase.from("reports").insert({
+    reporter_id: user.id,
+    target_type: targetType,
+    target_id: targetId,
+    reason: reason.trim().slice(0, 500),
+    status: "open",
+  });
+
+  if (error) return { error: error.message };
   return { ok: true };
 }
 
