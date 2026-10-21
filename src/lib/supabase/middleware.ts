@@ -6,13 +6,17 @@ export async function updateSession(request: NextRequest) {
     request,
   });
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SB_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey =
+    process.env.NEXT_PUBLIC_SB_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   // If env vars are not set yet, skip auth middleware so the site still loads
   if (!supabaseUrl || !supabaseAnonKey) {
     console.warn(
-      "[OpenCircle] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY — skipping auth middleware"
+      "[OpenCircle] Missing Supabase env vars — skipping auth middleware"
     );
     return supabaseResponse;
   }
@@ -36,19 +40,16 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  // Refresh the auth token so the session stays alive
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protect /app routes
   if (!user && request.nextUrl.pathname.startsWith("/app")) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  // Redirect logged-in users away from auth pages
   if (
     user &&
     (request.nextUrl.pathname === "/login" ||
