@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getDMChannelMessages } from "@/app/actions/dm-messages";
+import { DMChat } from "@/components/dm-chat";
 
 export default async function DMPage({
   params,
@@ -13,7 +15,6 @@ export default async function DMPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Verify participant
   const { data: part } = await supabase
     .from("dm_participants")
     .select("user_id")
@@ -29,7 +30,6 @@ export default async function DMPage({
     );
   }
 
-  // Get other participant
   const { data: others } = await supabase
     .from("dm_participants")
     .select(`profiles:user_id (display_name, username)`)
@@ -37,20 +37,21 @@ export default async function DMPage({
     .neq("user_id", user.id);
 
   const other = others?.[0]?.profiles as any;
+  const { messages, channelId } = await getDMChannelMessages(conversationId);
 
   return (
-    <div className="flex-1 flex flex-col">
-      <header className="h-12 px-4 flex items-center border-b border-border bg-card/30">
+    <div className="flex-1 flex flex-col min-h-0">
+      <header className="h-12 px-4 flex items-center border-b border-border bg-card/30 shrink-0">
         <h1 className="font-semibold">
           {other?.display_name || other?.username || "Direct Message"}
         </h1>
       </header>
-      <div className="flex-1 flex items-center justify-center p-6">
-        <p className="text-muted-foreground text-sm text-center max-w-sm">
-          DM messaging UI is ready for the next iteration. For now, use server
-          channels to chat. Full DM message thread is the next micro-slice.
-        </p>
-      </div>
+      <DMChat
+        conversationId={conversationId}
+        initialMessages={messages}
+        channelId={channelId}
+        currentUserId={user.id}
+      />
     </div>
   );
 }
