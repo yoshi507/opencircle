@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getMyServers } from "@/app/actions/servers";
-import { MessageCircle, Plus, Hash } from "lucide-react";
-import { CreateServerButton } from "@/components/create-server-button";
+import { Plus } from "lucide-react";
+import { CreateServerModal } from "@/components/create-server-modal";
 
 export default async function AppHomePage() {
   const servers = await getMyServers();
@@ -60,23 +60,16 @@ export default async function AppHomePage() {
                 <p className="text-sm text-muted-foreground mb-3">
                   Start a new community and invite your friends.
                 </p>
-                <div className="inline-block">
-                  {/* The button opens a modal */}
-                  <CreateServerHomeTrigger />
-                </div>
+                <CreateServerModal>
+                  <button className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90">
+                    Create server
+                  </button>
+                </CreateServerModal>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function CreateServerHomeTrigger() {
-  return (
-    <div className="[&>button]:w-auto [&>button]:h-auto [&>button]:rounded-lg [&>button]:px-4 [&>button]:py-2 [&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:hover:bg-primary/90 [&>button]:text-sm [&>button]:font-medium">
-      <CreateServerButton />
     </div>
   );
 }

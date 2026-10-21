@@ -18,19 +18,20 @@ export default async function ChannelPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Verify membership
   const { data: membership } = await supabase
     .from("server_members")
     .select("user_id")
     .eq("server_id", serverId)
     .eq("user_id", user.id)
     .eq("membership_status", "active")
-    .single();
+    .maybeSingle();
 
   if (!membership) {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
-        <p className="text-muted-foreground">You are not a member of this server.</p>
+        <p className="text-muted-foreground">
+          You are not a member of this server.
+        </p>
       </div>
     );
   }
@@ -40,7 +41,7 @@ export default async function ChannelPage({
     .select("*")
     .eq("id", channelId)
     .eq("server_id", serverId)
-    .single();
+    .maybeSingle();
 
   if (!channel) {
     return (
