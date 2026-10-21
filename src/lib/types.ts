@@ -3,9 +3,9 @@ export type Profile = {
   username: string;
   display_name: string;
   avatar_url: string | null;
-  bio: string | null;
-  status: string;
-  created_at: string;
+  bio?: string | null;
+  status?: string;
+  created_at?: string;
 };
 
 export type Server = {
@@ -37,5 +37,5 @@ export type Message = {
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
-  author?: Profile;
+  author?: Profile | null;
 };

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Message } from "@/lib/types";
+import type { Message, Profile } from "@/lib/types";
 
 export function MessageList({
   channelId,
@@ -36,31 +36,44 @@ export function MessageList({
           filter: `channel_id=eq.${channelId}`,
         },
         async (payload) => {
-          const newMsg = payload.new as any;
+          const newMsg = payload.new as {
+            id: string;
+            channel_id: string;
+            author_id: string;
+            content: string | null;
+            created_at: string;
+            edited_at: string | null;
+            deleted_at: string | null;
+          };
 
-          // Fetch author profile
           const { data: profile } = await supabase
             .from("profiles")
             .select("id, username, display_name, avatar_url")
             .eq("id", newMsg.author_id)
             .single();
 
+          const author: Profile | undefined = profile
+            ? {
+                id: profile.id,
+                username: profile.username,
+                display_name: profile.display_name,
+                avatar_url: profile.avatar_url,
+              }
+            : undefined;
+
           setMessages((prev) => {
-            // Avoid duplicates
             if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [
-              ...prev,
-              {
-                id: newMsg.id,
-                channel_id: newMsg.channel_id,
-                author_id: newMsg.author_id,
-                content: newMsg.content,
-                created_at: newMsg.created_at,
-                edited_at: newMsg.edited_at,
-                deleted_at: newMsg.deleted_at,
-                author: profile || undefined,
-              },
-            ];
+            const next: Message = {
+              id: newMsg.id,
+              channel_id: newMsg.channel_id,
+              author_id: newMsg.author_id,
+              content: newMsg.content,
+              created_at: newMsg.created_at,
+              edited_at: newMsg.edited_at,
+              deleted_at: newMsg.deleted_at,
+              author,
+            };
+            return [...prev, next];
           });
         }
       )
