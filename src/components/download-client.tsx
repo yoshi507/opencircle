@@ -7,6 +7,7 @@ import {
   Apple,
   Smartphone,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 
 type BeforeInstallPromptEvent = Event & {
@@ -14,43 +15,52 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
+const RELEASES =
+  "https://github.com/yoshi507/opencircle/actions/workflows/build-native.yml";
+const ARTIFACTS_HINT =
+  "https://github.com/yoshi507/opencircle/actions";
+
 const platforms = [
   {
     id: "windows",
     name: "Windows",
-    blurb: "Installer creates Desktop & Start Menu shortcuts in app mode.",
-    href: "/downloads/OpenCircle-Windows.bat",
-    filename: "OpenCircle-Setup.bat",
+    ext: ".exe",
+    blurb: "NSIS installer + portable OpenCircle.exe (Electron).",
     icon: Monitor,
-    hint: "Run the .bat file (Right-click → Run if SmartScreen appears).",
+    // Local fallback until CI artifact is published
+    href: "/downloads/OpenCircle-Windows.bat",
+    filename: "OpenCircle-Windows-fallback.bat",
+    primary: "Build produces OpenCircle-*-Windows.exe",
   },
   {
     id: "mac",
     name: "macOS",
-    blurb: "Installs OpenCircle.app to Applications and your Desktop.",
-    href: "/downloads/OpenCircle-Mac.command",
-    filename: "OpenCircle-Mac.command",
+    ext: ".pkg",
+    blurb: "macOS package installer for /Applications.",
     icon: Apple,
-    hint: "Right-click → Open the first time to allow the installer.",
+    href: "/downloads/OpenCircle-Mac.command",
+    filename: "OpenCircle-Mac-fallback.command",
+    primary: "Build produces OpenCircle-*-macOS.pkg",
   },
   {
     id: "android",
     name: "Android",
-    blurb: "Install as a full-screen app from Chrome or use the guide.",
-    href: "/downloads/OpenCircle-Android.txt",
-    filename: "OpenCircle-Android-Install.txt",
+    ext: ".apk",
+    blurb: "Release APK — install via Files or ADB.",
     icon: Smartphone,
-    hint: "Prefer the Install button below when available.",
-    pwa: true,
+    href: "/downloads/OpenCircle-Android.txt",
+    filename: "OpenCircle-Android-guide.txt",
+    primary: "Build produces app-release.apk",
   },
   {
     id: "ios",
     name: "iOS",
-    blurb: "Add to Home Screen in Safari for a native-style app.",
+    ext: ".ipa",
+    blurb: "IPA archive. Must be signed with your Apple Developer cert to install.",
+    icon: Apple,
     href: "/downloads/OpenCircle-iOS.txt",
-    filename: "OpenCircle-iOS-Install.txt",
-    icon: Smartphone,
-    hint: "Must use Safari → Share → Add to Home Screen.",
+    filename: "OpenCircle-iOS-guide.txt",
+    primary: "Build produces OpenCircle-unsigned.ipa",
   },
 ];
 
@@ -63,15 +73,12 @@ export function DownloadClient() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
-
     if (window.matchMedia("(display-mode: standalone)").matches) {
       setInstalled(true);
     }
-
     function onBip(e: Event) {
       e.preventDefault();
       setDeferred(e as BeforeInstallPromptEvent);
@@ -92,16 +99,52 @@ export function DownloadClient() {
 
   return (
     <div className="space-y-8">
+      <div className="rounded-2xl border border-border bg-card p-5 space-y-3">
+        <h2 className="font-semibold text-lg">Native installers (.exe · .pkg · .apk · .ipa)</h2>
+        <p className="text-sm text-muted-foreground">
+          Real packages are built by GitHub Actions (Windows Electron .exe,
+          macOS .pkg, Android .apk, iOS .ipa). Run the workflow, then download
+          the artifacts.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={RELEASES}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Run native build workflow
+          </a>
+          <a
+            href={ARTIFACTS_HINT}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border text-sm font-semibold hover:bg-accent"
+          >
+            Open Actions / artifacts
+          </a>
+        </div>
+        <ol className="text-xs text-muted-foreground list-decimal pl-5 space-y-1">
+          <li>Open the workflow → Run workflow</li>
+          <li>Wait for Windows / macOS / Android / iOS jobs</li>
+          <li>Download artifacts: windows-installers, macos-installers, android-apk, ios-ipa</li>
+        </ol>
+        <p className="text-xs text-amber-400/90">
+          Note: .ipa is unsigned. Installing on a device requires your Apple
+          Developer certificate (Xcode or AltStore / Sideloadly). Google Play /
+          App Store listing is separate.
+        </p>
+      </div>
+
       {(deferred || installed) && (
         <div className="rounded-2xl border border-primary/30 bg-primary/10 p-5 flex flex-col sm:flex-row items-center gap-4 justify-between">
           <div>
             <p className="font-semibold">
-              {installed ? "OpenCircle is installed" : "Install this device"}
+              {installed ? "Web app installed" : "Quick install (PWA)"}
             </p>
             <p className="text-sm text-muted-foreground">
-              {installed
-                ? "Launch it from your home screen or app list for the best experience."
-                : "One tap installs OpenCircle like a native app — same UI as the site."}
+              Instant full-screen install while native packages build.
             </p>
           </div>
           {!installed && deferred && (
@@ -115,7 +158,7 @@ export function DownloadClient() {
               ) : (
                 <Download className="w-4 h-4" />
               )}
-              Install app
+              Install now
             </button>
           )}
         </div>
@@ -127,35 +170,43 @@ export function DownloadClient() {
           return (
             <div
               key={p.id}
-              className="rounded-2xl border border-border bg-card p-5 flex flex-col gap-4 hover:border-primary/40 transition-colors"
+              className="rounded-2xl border border-border bg-card p-5 flex flex-col gap-3"
             >
               <div className="flex items-start gap-3">
                 <div className="w-11 h-11 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
                   <Icon className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-bold text-lg">{p.name}</h2>
+                  <h2 className="font-bold text-lg">
+                    {p.name}{" "}
+                    <span className="text-primary text-sm font-mono">
+                      {p.ext}
+                    </span>
+                  </h2>
                   <p className="text-sm text-muted-foreground">{p.blurb}</p>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">{p.hint}</p>
+              <p className="text-xs text-muted-foreground">{p.primary}</p>
+              <a
+                href={ARTIFACTS_HINT}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-secondary hover:bg-accent text-sm font-semibold"
+              >
+                <Download className="w-4 h-4" />
+                Get {p.ext} from Actions
+              </a>
               <a
                 href={p.href}
                 download={p.filename}
-                className="mt-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-secondary hover:bg-accent text-sm font-semibold transition-colors"
+                className="text-center text-xs text-muted-foreground hover:text-foreground"
               >
-                <Download className="w-4 h-4" />
-                Download for {p.name}
+                Temporary helper download
               </a>
             </div>
           );
         })}
       </div>
-
-      <p className="text-center text-xs text-muted-foreground">
-        Desktop installers open OpenCircle in browser app mode (no tabs or URL
-        bar). Mobile uses Home Screen install for a full-screen experience.
-      </p>
     </div>
   );
 }
