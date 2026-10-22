@@ -3,17 +3,17 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
-// Simple bit flags
+// Simple bit flags (number, not BigInt — keeps TS target compatible)
 export const PERMS = {
-  VIEW_CHANNELS: 1n << 0n,
-  SEND_MESSAGES: 1n << 1n,
-  MANAGE_MESSAGES: 1n << 2n,
-  KICK_MEMBERS: 1n << 3n,
-  BAN_MEMBERS: 1n << 4n,
-  MANAGE_CHANNELS: 1n << 5n,
-  MANAGE_ROLES: 1n << 6n,
-  ADMINISTRATOR: 1n << 7n,
-};
+  VIEW_CHANNELS: 1 << 0,
+  SEND_MESSAGES: 1 << 1,
+  MANAGE_MESSAGES: 1 << 2,
+  KICK_MEMBERS: 1 << 3,
+  BAN_MEMBERS: 1 << 4,
+  MANAGE_CHANNELS: 1 << 5,
+  MANAGE_ROLES: 1 << 6,
+  ADMINISTRATOR: 1 << 7,
+} as const;
 
 export async function createRole(
   serverId: string,
