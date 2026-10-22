@@ -5,7 +5,6 @@ import { sendMessage } from "@/app/actions/messages";
 import { uploadAttachment } from "@/app/actions/attachments";
 import { Send, Loader2, Paperclip } from "lucide-react";
 
-// Simple client-side rate limit: max 5 messages per 10 seconds
 const recentSends: number[] = [];
 
 export function MessageComposer({ channelId }: { channelId: string }) {
@@ -20,9 +19,7 @@ export function MessageComposer({ channelId }: { channelId: string }) {
     while (recentSends.length && now - recentSends[0] > 10000) {
       recentSends.shift();
     }
-    if (recentSends.length >= 5) {
-      return false;
-    }
+    if (recentSends.length >= 5) return false;
     recentSends.push(now);
     return true;
   }
@@ -46,6 +43,17 @@ export function MessageComposer({ channelId }: { channelId: string }) {
       setError(result.error);
       setLoading(false);
       return;
+    }
+
+    if (result.botReply) {
+      window.dispatchEvent(
+        new CustomEvent("opencircle-bot-reply", {
+          detail: {
+            channelId,
+            content: result.botReply,
+          },
+        })
+      );
     }
 
     setContent("");
@@ -99,7 +107,7 @@ export function MessageComposer({ channelId }: { channelId: string }) {
           value={content}
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Message…"
+          placeholder="Message… try !help"
           rows={1}
           className="flex-1 px-3 py-2.5 rounded-xl bg-background border border-input text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring max-h-32"
           disabled={loading}

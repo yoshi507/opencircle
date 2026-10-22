@@ -10,6 +10,7 @@ import {
 import { getThreadReplies, sendThreadReply } from "@/app/actions/threads";
 import { summarizeChannel } from "@/app/actions/summarize";
 import type { Message, Profile } from "@/lib/types";
+import { BotBadge } from "@/components/bot-badge";
 import {
   Pencil,
   Trash2,
@@ -20,6 +21,15 @@ import {
 } from "lucide-react";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "🎉"];
+const BOT_ID = "00000000-0000-4000-8000-000000000001";
+
+function isBotAuthor(msg: Message) {
+  return (
+    msg.author?.is_bot === true ||
+    msg.author_id === BOT_ID ||
+    msg.author?.username === "opencircle"
+  );
+}
 
 export function MessageList({
   channelId,
@@ -49,6 +59,38 @@ export function MessageList({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Ephemeral bot replies when DB insert isn't possible
+  useEffect(() => {
+    function onBot(e: Event) {
+      const detail = (e as CustomEvent).detail as {
+        channelId: string;
+        content: string;
+      };
+      if (detail.channelId !== channelId) return;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `bot-${Date.now()}`,
+          channel_id: channelId,
+          author_id: BOT_ID,
+          content: detail.content,
+          created_at: new Date().toISOString(),
+          edited_at: null,
+          deleted_at: null,
+          author: {
+            id: BOT_ID,
+            username: "opencircle",
+            display_name: "OpenCircle",
+            avatar_url: null,
+            is_bot: true,
+          },
+        },
+      ]);
+    }
+    window.addEventListener("opencircle-bot-reply", onBot);
+    return () => window.removeEventListener("opencircle-bot-reply", onBot);
+  }, [channelId]);
+
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
@@ -63,12 +105,11 @@ export function MessageList({
         },
         async (payload) => {
           const newMsg = payload.new as any;
-          // Skip thread replies in main list
           if (newMsg.parent_id) return;
 
           const { data: profile } = await supabase
             .from("profiles")
-            .select("id, username, display_name, avatar_url")
+            .select("id, username, display_name, avatar_url, is_bot")
             .eq("id", newMsg.author_id)
             .single();
 
@@ -78,6 +119,7 @@ export function MessageList({
                 username: profile.username,
                 display_name: profile.display_name,
                 avatar_url: profile.avatar_url,
+                is_bot: profile.is_bot,
               }
             : undefined;
 
@@ -213,12 +255,13 @@ export function MessageList({
           {messages.length === 0 && (
             <div className="flex items-center justify-center h-full">
               <p className="text-muted-foreground text-sm">
-                No messages yet. Say hello! 👋
+                No messages yet. Try <code>!help</code> 👋
               </p>
             </div>
           )}
           {messages.map((msg) => {
             const isOwn = msg.author_id === currentUserId;
+            const bot = isBotAuthor(msg);
             return (
               <div key={msg.id} className="flex gap-3 group relative">
                 <div className="w-9 h-9 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
@@ -227,12 +270,13 @@ export function MessageList({
                     .toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-sm">
                       {msg.author?.display_name ||
                         msg.author?.username ||
                         "Unknown"}
                     </span>
+                    {bot && <BotBadge />}
                     <span className="text-[11px] text-muted-foreground">
                       {new Date(msg.created_at).toLocaleString([], {
                         month: "short",
@@ -269,43 +313,45 @@ export function MessageList({
                     </p>
                   )}
 
-                  <div className="absolute right-0 top-0 hidden group-hover:flex items-center gap-0.5 bg-card border border-border rounded-lg shadow-sm p-0.5">
-                    {QUICK_EMOJIS.map((e) => (
+                  {!bot && (
+                    <div className="absolute right-0 top-0 hidden group-hover:flex items-center gap-0.5 bg-card border border-border rounded-lg shadow-sm p-0.5">
+                      {QUICK_EMOJIS.map((em) => (
+                        <button
+                          key={em}
+                          onClick={() => handleReaction(msg.id, em)}
+                          className="p-1 hover:bg-accent rounded text-sm"
+                        >
+                          {em}
+                        </button>
+                      ))}
                       <button
-                        key={e}
-                        onClick={() => handleReaction(msg.id, e)}
-                        className="p-1 hover:bg-accent rounded text-sm"
+                        onClick={() => openThread(msg.id)}
+                        className="p-1 hover:bg-accent rounded text-muted-foreground"
+                        title="Reply in thread"
                       >
-                        {e}
+                        <MessageSquare className="w-3.5 h-3.5" />
                       </button>
-                    ))}
-                    <button
-                      onClick={() => openThread(msg.id)}
-                      className="p-1 hover:bg-accent rounded text-muted-foreground"
-                      title="Reply in thread"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                    </button>
-                    {isOwn && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setEditingId(msg.id);
-                            setEditText(msg.content || "");
-                          }}
-                          className="p-1 hover:bg-accent rounded text-muted-foreground"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(msg.id)}
-                          className="p-1 hover:bg-accent rounded text-destructive"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </>
-                    )}
-                  </div>
+                      {isOwn && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setEditingId(msg.id);
+                              setEditText(msg.content || "");
+                            }}
+                            className="p-1 hover:bg-accent rounded text-muted-foreground"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(msg.id)}
+                            className="p-1 hover:bg-accent rounded text-destructive"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -314,7 +360,6 @@ export function MessageList({
         </div>
       </div>
 
-      {/* Thread panel */}
       {threadId && (
         <div className="w-full sm:w-80 shrink-0 border-l border-border bg-card flex flex-col absolute sm:relative inset-0 sm:inset-auto z-20">
           <div className="h-12 px-3 flex items-center justify-between border-b border-border">

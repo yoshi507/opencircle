@@ -40,7 +40,7 @@ export async function getMessages(channelId: string, limit = 50) {
     .order("created_at", { ascending: true })
     .limit(limit);
 
-  if (withParent.error && /parent_id/i.test(withParent.error.message)) {
+  if (withParent.error && /parent_id/i.test(withParent.error.message || "")) {
     const fallback = await supabase
       .from("messages")
       .select(
@@ -58,8 +58,23 @@ export async function getMessages(channelId: string, limit = 50) {
     }
     rows = fallback.data;
   } else if (withParent.error) {
-    console.error(withParent.error);
-    return [];
+    // is_bot column might be missing
+    if (/is_bot/i.test(withParent.error.message || "")) {
+      const fb = await supabase
+        .from("messages")
+        .select(
+          `id, channel_id, author_id, content, created_at, edited_at, deleted_at,
+           profiles:author_id (id, username, display_name, avatar_url)`
+        )
+        .eq("channel_id", channelId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true })
+        .limit(limit);
+      rows = fb.data;
+    } else {
+      console.error(withParent.error);
+      return [];
+    }
   } else {
     rows = withParent.data;
   }
@@ -116,16 +131,17 @@ export async function sendMessage(channelId: string, content: string) {
 
   if (error) return { error: error.message };
 
-  // Built-in bot commands
+  let botReply: string | null = null;
   if (trimmed.startsWith("!") || trimmed.startsWith("/")) {
     try {
-      await tryBuiltinBotReply(channelId, trimmed, user.id);
+      const result = await tryBuiltinBotReply(channelId, trimmed, user.id);
+      if (result?.ephemeral) botReply = result.ephemeral;
+      // if result.message was inserted, realtime will show it
     } catch (e) {
       console.error("bot", e);
     }
   }
 
-  // Fire webhooks (non-blocking)
   void dispatchWebhooks(channel.server_id, "message.created", {
     channel_id: channelId,
     message_id: message.id,
@@ -133,7 +149,7 @@ export async function sendMessage(channelId: string, content: string) {
     content: trimmed,
   });
 
-  return { message };
+  return { message, botReply };
 }
 
 async function dispatchWebhooks(
@@ -157,12 +173,6 @@ async function dispatchWebhooks(
         : ["message.created"];
       if (!events.includes(event) && !events.includes("*")) continue;
 
-      const body = JSON.stringify({
-        event,
-        timestamp: new Date().toISOString(),
-        data: payload,
-      });
-
       try {
         await fetch(hook.url, {
           method: "POST",
@@ -171,7 +181,11 @@ async function dispatchWebhooks(
             "X-OpenCircle-Event": event,
             ...(hook.secret ? { "X-OpenCircle-Secret": hook.secret } : {}),
           },
-          body,
+          body: JSON.stringify({
+            event,
+            timestamp: new Date().toISOString(),
+            data: payload,
+          }),
           signal: AbortSignal.timeout(5000),
         });
       } catch {
