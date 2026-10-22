@@ -3,6 +3,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
+type DMListItem = {
+  conversationId: string;
+  other: {
+    id: string;
+    username: string;
+    display_name: string;
+    avatar_url: string | null;
+  } | null;
+};
+
 export async function getOrCreateDM(otherUserId: string) {
   const supabase = await createClient();
   const {
@@ -11,7 +21,6 @@ export async function getOrCreateDM(otherUserId: string) {
   if (!user) return { error: "Not signed in." };
   if (otherUserId === user.id) return { error: "Cannot DM yourself." };
 
-  // Check block either way
   const { data: blocked } = await supabase
     .from("blocks")
     .select("blocker_id")
@@ -22,7 +31,6 @@ export async function getOrCreateDM(otherUserId: string) {
 
   if (blocked) return { error: "Cannot message this user." };
 
-  // Find existing DM between these two
   const { data: myConvos } = await supabase
     .from("dm_participants")
     .select("conversation_id")
@@ -42,7 +50,6 @@ export async function getOrCreateDM(otherUserId: string) {
     }
   }
 
-  // Create new
   const { data: convo, error } = await supabase
     .from("dm_conversations")
     .insert({ type: "direct" })
@@ -59,7 +66,7 @@ export async function getOrCreateDM(otherUserId: string) {
   return { conversationId: convo.id };
 }
 
-export async function getMyDMs() {
+export async function getMyDMs(): Promise<DMListItem[]> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -73,7 +80,7 @@ export async function getMyDMs() {
 
   if (!parts?.length) return [];
 
-  const results = [];
+  const results: DMListItem[] = [];
   for (const p of parts) {
     const { data: others } = await supabase
       .from("dm_participants")
@@ -83,9 +90,17 @@ export async function getMyDMs() {
       .eq("conversation_id", p.conversation_id)
       .neq("user_id", user.id);
 
+    const profile = others?.[0]?.profiles as
+      | { id: string; username: string; display_name: string; avatar_url: string | null }
+      | { id: string; username: string; display_name: string; avatar_url: string | null }[]
+      | null
+      | undefined;
+
+    const other = Array.isArray(profile) ? profile[0] ?? null : profile ?? null;
+
     results.push({
       conversationId: p.conversation_id,
-      other: others?.[0]?.profiles || null,
+      other,
     });
   }
   return results;

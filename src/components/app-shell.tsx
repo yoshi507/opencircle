@@ -12,7 +12,6 @@ import {
   Home,
   Menu,
   X,
-  Shield,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -35,6 +34,10 @@ export function AppShell({ children, user }: AppShellProps) {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [servers, setServers] = useState<any[]>([]);
+  const [channels, setChannels] = useState<any[]>([]);
+
+  const serverMatch = pathname.match(/\/app\/servers\/([^/]+)/);
+  const currentServerId = serverMatch?.[1] || null;
 
   useEffect(() => {
     async function loadServers() {
@@ -52,6 +55,23 @@ export function AppShell({ children, user }: AppShellProps) {
     loadServers();
   }, [user.id, pathname]);
 
+  useEffect(() => {
+    async function loadChannels() {
+      if (!currentServerId) {
+        setChannels([]);
+        return;
+      }
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("channels")
+        .select("id, name, server_id")
+        .eq("server_id", currentServerId)
+        .order("position", { ascending: true });
+      setChannels(data || []);
+    }
+    loadChannels();
+  }, [currentServerId, pathname]);
+
   async function handleSignOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -65,9 +85,7 @@ export function AppShell({ children, user }: AppShellProps) {
     user.email?.split("@")[0] ||
     "User";
 
-  // Extract current server id from path if present
-  const serverMatch = pathname.match(/\/app\/servers\/([^/]+)/);
-  const currentServerId = serverMatch?.[1] || null;
+  const currentServer = servers.find((s) => s.id === currentServerId);
 
   return (
     <div className="h-dvh flex flex-col md:flex-row overflow-hidden bg-background">
@@ -78,7 +96,9 @@ export function AppShell({ children, user }: AppShellProps) {
         >
           <Menu className="w-5 h-5" />
         </button>
-        <span className="font-semibold">OpenCircle</span>
+        <span className="font-semibold truncate">
+          {currentServer?.name || "OpenCircle"}
+        </span>
         <Link
           href="/app/settings"
           className="p-2 -mr-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -100,6 +120,7 @@ export function AppShell({ children, user }: AppShellProps) {
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
+        {/* Server rail (icons only) */}
         <div className="w-[72px] flex-shrink-0 bg-[#0c0c0e] flex flex-col items-center py-3 gap-2 border-r border-border overflow-y-auto">
           <Link
             href="/app"
@@ -136,9 +157,12 @@ export function AppShell({ children, user }: AppShellProps) {
           <CreateServerButton />
         </div>
 
+        {/* Secondary sidebar */}
         <div className="w-60 flex-shrink-0 bg-card border-r border-border flex flex-col">
           <div className="h-12 px-4 flex items-center justify-between border-b border-border">
-            <span className="font-semibold truncate">OpenCircle</span>
+            <span className="font-semibold truncate">
+              {currentServer?.name || "OpenCircle"}
+            </span>
             <button
               className="md:hidden p-1.5 rounded-md text-muted-foreground hover:text-foreground"
               onClick={() => setMobileOpen(false)}
@@ -148,26 +172,64 @@ export function AppShell({ children, user }: AppShellProps) {
           </div>
 
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            <NavItem
-              href="/app"
-              icon={<MessageCircle className="w-4 h-4" />}
-              label="Home"
-              active={pathname === "/app"}
-              onClick={() => setMobileOpen(false)}
-            />
-            <NavItem
-              href="/app/friends"
-              icon={<Users className="w-4 h-4" />}
-              label="Friends & DMs"
-              active={pathname.startsWith("/app/friends") || pathname.startsWith("/app/dms")}
-              onClick={() => setMobileOpen(false)}
-            />
+            {!currentServerId && (
+              <>
+                <NavItem
+                  href="/app"
+                  icon={<MessageCircle className="w-4 h-4" />}
+                  label="Home"
+                  active={pathname === "/app"}
+                  onClick={() => setMobileOpen(false)}
+                />
+                <NavItem
+                  href="/app/friends"
+                  icon={<Users className="w-4 h-4" />}
+                  label="Friends & DMs"
+                  active={
+                    pathname.startsWith("/app/friends") ||
+                    pathname.startsWith("/app/dms")
+                  }
+                  onClick={() => setMobileOpen(false)}
+                />
+              </>
+            )}
 
-            {servers.length > 0 && (
+            {currentServerId && channels.length > 0 && (
+              <>
+                <div className="pt-2 pb-1 px-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Channels
+                  </p>
+                </div>
+                {channels.map((ch) => (
+                  <NavItem
+                    key={ch.id}
+                    href={`/app/servers/${currentServerId}/channels/${ch.id}`}
+                    icon={<Hash className="w-4 h-4" />}
+                    label={ch.name}
+                    active={pathname.includes(ch.id)}
+                    onClick={() => setMobileOpen(false)}
+                  />
+                ))}
+              </>
+            )}
+
+            {currentServerId && channels.length === 0 && (
+              <div className="pt-2 pb-1 px-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Channels
+                </p>
+                <p className="text-xs text-muted-foreground px-2 py-2">
+                  No channels yet
+                </p>
+              </div>
+            )}
+
+            {!currentServerId && servers.length > 0 && (
               <>
                 <div className="pt-4 pb-1 px-2">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Servers
+                    Your servers
                   </p>
                 </div>
                 {servers.map((server) => (
@@ -181,16 +243,6 @@ export function AppShell({ children, user }: AppShellProps) {
                   />
                 ))}
               </>
-            )}
-
-            {currentServerId && (
-              <NavItem
-                href={`/app/servers/${currentServerId}/settings`}
-                icon={<Shield className="w-4 h-4" />}
-                label="Server settings"
-                active={pathname.includes("/settings")}
-                onClick={() => setMobileOpen(false)}
-              />
             )}
           </div>
 
@@ -226,22 +278,50 @@ export function AppShell({ children, user }: AppShellProps) {
       </main>
 
       <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 bg-card border-t border-border flex items-center justify-around z-30">
-        <BottomNavItem href="/app" icon={<Home className="w-5 h-5" />} label="Home" active={pathname === "/app"} />
-        <BottomNavItem href="/app/friends" icon={<Users className="w-5 h-5" />} label="Friends" active={pathname.startsWith("/app/friends") || pathname.startsWith("/app/dms")} />
-        <button onClick={() => setMobileOpen(true)} className="flex flex-col items-center gap-0.5 text-muted-foreground">
+        <BottomNavItem
+          href="/app"
+          icon={<Home className="w-5 h-5" />}
+          label="Home"
+          active={pathname === "/app"}
+        />
+        <BottomNavItem
+          href="/app/friends"
+          icon={<Users className="w-5 h-5" />}
+          label="Friends"
+          active={
+            pathname.startsWith("/app/friends") || pathname.startsWith("/app/dms")
+          }
+        />
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="flex flex-col items-center gap-0.5 text-muted-foreground"
+        >
           <Hash className="w-5 h-5" />
-          <span className="text-[10px]">Servers</span>
+          <span className="text-[10px]">Channels</span>
         </button>
-        <BottomNavItem href="/app/settings" icon={<Settings className="w-5 h-5" />} label="Settings" active={pathname.startsWith("/app/settings")} />
+        <BottomNavItem
+          href="/app/settings"
+          icon={<Settings className="w-5 h-5" />}
+          label="Settings"
+          active={pathname.startsWith("/app/settings")}
+        />
       </nav>
     </div>
   );
 }
 
 function NavItem({
-  href, icon, label, active, onClick,
+  href,
+  icon,
+  label,
+  active,
+  onClick,
 }: {
-  href: string; icon: React.ReactNode; label: string; active?: boolean; onClick?: () => void;
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <Link
@@ -249,7 +329,9 @@ function NavItem({
       onClick={onClick}
       className={cn(
         "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors",
-        active ? "bg-accent text-foreground font-medium" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+        active
+          ? "bg-accent text-foreground font-medium"
+          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
       )}
     >
       {icon}
@@ -259,9 +341,15 @@ function NavItem({
 }
 
 function BottomNavItem({
-  href, icon, label, active,
+  href,
+  icon,
+  label,
+  active,
 }: {
-  href: string; icon: React.ReactNode; label: string; active?: boolean;
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
 }) {
   return (
     <Link
