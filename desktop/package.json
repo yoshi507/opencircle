@@ -8,7 +8,7 @@
   "scripts": {
     "start": "electron .",
     "dist:win": "electron-builder --win nsis portable --x64",
-    "dist:mac": "electron-builder --mac pkg zip --x64 --arm64",
+    "dist:mac": "electron-builder --mac zip --x64",
     "dist:linux": "electron-builder --linux AppImage"
   },
   "build": {
@@ -33,17 +33,10 @@
       "shortcutName": "OpenCircle"
     },
     "mac": {
-      "target": [
-        { "target": "pkg", "arch": ["universal"] },
-        { "target": "zip", "arch": ["universal"] }
-      ],
+      "target": [{ "target": "zip", "arch": ["x64"] }],
       "artifactName": "OpenCircle-${version}-macOS.${ext}",
       "category": "public.app-category.social-networking",
       "identity": null
-    },
-    "pkg": {
-      "installLocation": "/Applications",
-      "allowAnywhere": true
     },
     "linux": {
       "target": ["AppImage"],

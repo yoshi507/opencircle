@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getDMChannelMessages } from "@/app/actions/dm-messages";
@@ -15,17 +16,50 @@ export default async function DMPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: part } = await supabase
+  if (!conversationId || conversationId === "undefined") {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 gap-3">
+        <p className="text-muted-foreground">Invalid conversation.</p>
+        <Link href="/app/friends" className="text-sm text-primary">
+          Back to Friends
+        </Link>
+      </div>
+    );
+  }
+
+  let { data: part } = await supabase
     .from("dm_participants")
     .select("user_id")
     .eq("conversation_id", conversationId)
     .eq("user_id", user.id)
     .maybeSingle();
 
+  // If create_or_get_dm ran as SECURITY DEFINER but SELECT lag/policy glitch,
+  // try joining as ourselves once.
+  if (!part) {
+    const { error: joinErr } = await supabase.from("dm_participants").insert({
+      conversation_id: conversationId,
+      user_id: user.id,
+    });
+    if (!joinErr) {
+      part = { user_id: user.id };
+    }
+  }
+
   if (!part) {
     return (
-      <div className="flex-1 flex items-center justify-center p-6">
-        <p className="text-muted-foreground">Conversation not found.</p>
+      <div className="flex-1 flex flex-col items-center justify-center p-6 gap-3">
+        <p className="text-muted-foreground text-center">
+          Conversation not found.
+          <br />
+          <span className="text-xs">
+            If this is a new DM, run migration 011 in Supabase, then try again
+            from Friends.
+          </span>
+        </p>
+        <Link href="/app/friends" className="text-sm text-primary">
+          Back to Friends
+        </Link>
       </div>
     );
   }
@@ -36,14 +70,18 @@ export default async function DMPage({
     .eq("conversation_id", conversationId)
     .neq("user_id", user.id);
 
-  const other = others?.[0]?.profiles as any;
+  const otherProfile = others?.[0]?.profiles;
+  const other = Array.isArray(otherProfile) ? otherProfile[0] : otherProfile;
+
   const { messages, channelId } = await getDMChannelMessages(conversationId);
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <header className="h-12 px-4 flex items-center border-b border-border bg-card/30 shrink-0">
         <h1 className="font-semibold">
-          {other?.display_name || other?.username || "Direct Message"}
+          {(other as any)?.display_name ||
+            (other as any)?.username ||
+            "Direct Message"}
         </h1>
       </header>
       <DMChat
