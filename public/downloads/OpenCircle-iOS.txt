@@ -1,0 +1,15 @@
+OpenCircle for iPhone & iPad
+============================
+
+Install as a Home Screen app (full-screen, no Safari chrome):
+
+1. Open Safari (required on iOS)
+2. Go to https://opencircle-lol-creative.vercel.app
+3. Tap the Share button (square with arrow)
+4. Scroll and tap "Add to Home Screen"
+5. Name it OpenCircle → Add
+
+Open the icon from your Home Screen — it runs like a native app
+with the same layout and features as the website.
+
+Tip: Allow notifications when prompted for the best experience.

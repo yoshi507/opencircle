@@ -1,0 +1,19 @@
+OpenCircle for Android
+======================
+
+Install as a native-feeling app (Progressive Web App):
+
+Chrome / Edge on Android
+1. Open https://opencircle-lol-creative.vercel.app in Chrome
+2. Tap the menu (⋮) → "Install app" or "Add to Home screen"
+3. Confirm Install
+
+Samsung Internet
+1. Open the site
+2. Menu → Add page to → Home screen
+
+The installed app opens full-screen without the browser bar,
+with the same smooth UI as the website.
+
+You can also use the Install button on the Download page
+when your browser supports it.
