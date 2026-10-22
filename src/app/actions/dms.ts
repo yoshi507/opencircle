@@ -21,6 +21,21 @@ export async function getOrCreateDM(otherUserId: string) {
   if (!user) return { error: "Not signed in." };
   if (otherUserId === user.id) return { error: "Cannot DM yourself." };
 
+  // Preferred path: atomic SECURITY DEFINER function (migration 011)
+  const { data: rpcId, error: rpcError } = await supabase.rpc(
+    "create_or_get_dm",
+    { other_user_id: otherUserId }
+  );
+
+  if (!rpcError && rpcId) {
+    return { conversationId: rpcId as string };
+  }
+
+  // Fallback if RPC not installed yet
+  if (rpcError) {
+    console.error("create_or_get_dm rpc:", rpcError.message);
+  }
+
   const { data: blocked } = await supabase
     .from("blocks")
     .select("blocker_id")
@@ -31,7 +46,6 @@ export async function getOrCreateDM(otherUserId: string) {
 
   if (blocked) return { error: "Cannot message this user." };
 
-  // Find existing conversation with this user
   const { data: myConvos } = await supabase
     .from("dm_participants")
     .select("conversation_id")
@@ -51,7 +65,6 @@ export async function getOrCreateDM(otherUserId: string) {
     }
   }
 
-  // Create conversation
   const { data: convo, error } = await supabase
     .from("dm_conversations")
     .insert({ type: "direct" })
@@ -61,17 +74,15 @@ export async function getOrCreateDM(otherUserId: string) {
   if (error || !convo) {
     return {
       error:
-        error?.message ||
-        "Failed to create DM. Run migration 010_bots_dm_rls.sql in Supabase.",
+        (rpcError?.message || error?.message || "Failed to create DM") +
+        " — run migration 011_dm_create_rpc.sql in Supabase SQL editor.",
     };
   }
 
-  // Insert self first (required for policy that allows adding the other user)
   const { error: selfErr } = await supabase.from("dm_participants").insert({
     conversation_id: convo.id,
     user_id: user.id,
   });
-
   if (selfErr) {
     return { error: selfErr.message };
   }
@@ -80,13 +91,8 @@ export async function getOrCreateDM(otherUserId: string) {
     conversation_id: convo.id,
     user_id: otherUserId,
   });
-
   if (otherErr) {
-    return {
-      error:
-        otherErr.message +
-        " — update dm_participants RLS (migration 010).",
-    };
+    return { error: otherErr.message };
   }
 
   return { conversationId: convo.id };
