@@ -3,14 +3,18 @@
 import { createClient } from "@/lib/supabase/server";
 
 export async function getVoiceToken(channelId: string) {
-  const apiKey = process.env.LIVEKIT_API_KEY;
-  const apiSecret = process.env.LIVEKIT_API_SECRET;
-  const livekitUrl = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL;
+  const apiKey = process.env.LK_KEY || process.env.LIVEKIT_API_KEY;
+  const apiSecret = process.env.LK_SECRET || process.env.LIVEKIT_API_SECRET;
+  const livekitUrl =
+    process.env.LK_URL ||
+    process.env.NEXT_PUBLIC_LK_URL ||
+    process.env.LIVEKIT_URL ||
+    process.env.NEXT_PUBLIC_LIVEKIT_URL;
 
   if (!apiKey || !apiSecret || !livekitUrl) {
     return {
       error:
-        "Voice is not configured. Add LIVEKIT_API_KEY, LIVEKIT_API_SECRET, and NEXT_PUBLIC_LIVEKIT_URL in Vercel.",
+        "Voice is not configured. Add LK_URL, LK_KEY, and LK_SECRET in Vercel.",
     };
   }
 
@@ -51,7 +55,6 @@ export async function getVoiceToken(channelId: string) {
   const name =
     profile?.display_name || profile?.username || user.email || "User";
 
-  // Dynamic import so the module is only loaded when needed
   const { AccessToken } = await import("livekit-server-sdk");
 
   const at = new AccessToken(apiKey, apiSecret, {
