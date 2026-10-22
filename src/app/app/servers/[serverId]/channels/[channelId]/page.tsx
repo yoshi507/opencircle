@@ -6,7 +6,8 @@ import { getServerMembers } from "@/app/actions/invites";
 import { MessageList } from "@/components/message-list";
 import { MessageComposer } from "@/components/message-composer";
 import { MembersPanel } from "@/components/members-panel";
-import { Hash, Settings } from "lucide-react";
+import { VoiceRoom } from "@/components/voice-room";
+import { Hash, Settings, Volume2 } from "lucide-react";
 
 export default async function ChannelPage({
   params,
@@ -59,6 +60,29 @@ export default async function ChannelPage({
     .maybeSingle();
 
   const isOwner = server?.owner_id === user.id;
+  const isVoice = channel.type === "voice";
+
+  if (isVoice) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0">
+        <header className="h-12 px-4 flex items-center gap-2 border-b border-border bg-card/30 shrink-0">
+          <Volume2 className="w-5 h-5 text-muted-foreground" />
+          <h1 className="font-semibold flex-1 truncate">{channel.name}</h1>
+          {isOwner && (
+            <Link
+              href={`/app/servers/${serverId}/settings`}
+              className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent"
+              title="Server settings"
+            >
+              <Settings className="w-5 h-5" />
+            </Link>
+          )}
+        </header>
+        <VoiceRoom channelId={channelId} channelName={channel.name} />
+      </div>
+    );
+  }
+
   const messages = await getMessages(channelId);
   const members = await getServerMembers(serverId);
 
