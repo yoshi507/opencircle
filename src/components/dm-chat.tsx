@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { sendDMMessage } from "@/app/actions/dm-messages";
 import { createClient } from "@/lib/supabase/client";
-import { Send, Loader2 } from "lucide-react";
 import type { Message } from "@/lib/types";
+import { Loader2, Send } from "lucide-react";
 
 export function DMChat({
   conversationId,
   initialMessages,
-  channelId: initialChannelId,
+  channelId: _channelId,
   currentUserId,
 }: {
   conversationId: string;
@@ -17,49 +17,55 @@ export function DMChat({
   channelId: string | null;
   currentUserId: string;
 }) {
-  const [messages, setMessages] = useState(initialMessages);
-  const [channelId, setChannelId] = useState(initialChannelId);
-  const [content, setContent] = useState("");
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMessages(initialMessages);
+  }, [initialMessages, conversationId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Realtime on shared dm_messages table
   useEffect(() => {
-    if (!channelId) return;
     const supabase = createClient();
-    const ch = supabase
-      .channel(`dm:${channelId}`)
+    const channel = supabase
+      .channel(`dm:${conversationId}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
-          table: "messages",
-          filter: `channel_id=eq.${channelId}`,
+          table: "dm_messages",
+          filter: `conversation_id=eq.${conversationId}`,
         },
         async (payload) => {
-          const newMsg = payload.new as any;
+          const row = payload.new as any;
+          if (messages.some((m) => m.id === row.id)) return;
+
           const { data: profile } = await supabase
             .from("profiles")
             .select("id, username, display_name, avatar_url")
-            .eq("id", newMsg.author_id)
+            .eq("id", row.author_id)
             .single();
 
           setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            if (prev.some((m) => m.id === row.id)) return prev;
             return [
               ...prev,
               {
-                id: newMsg.id,
-                channel_id: newMsg.channel_id,
-                author_id: newMsg.author_id,
-                content: newMsg.content,
-                created_at: newMsg.created_at,
-                edited_at: newMsg.edited_at,
-                deleted_at: newMsg.deleted_at,
+                id: row.id,
+                channel_id: conversationId,
+                author_id: row.author_id,
+                content: row.content,
+                created_at: row.created_at,
+                edited_at: row.edited_at,
+                deleted_at: row.deleted_at,
                 author: profile || undefined,
               },
             ];
@@ -69,94 +75,125 @@ export function DMChat({
       .subscribe();
 
     return () => {
-      supabase.removeChannel(ch);
+      supabase.removeChannel(channel);
     };
-  }, [channelId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
 
   async function handleSend(e?: React.FormEvent) {
     e?.preventDefault();
-    const trimmed = content.trim();
+    const trimmed = text.trim();
     if (!trimmed || loading) return;
+
     setLoading(true);
+    setError(null);
     const result = await sendDMMessage(conversationId, trimmed);
     if (result.error) {
-      alert(result.error);
-    } else {
-      setContent("");
-      if (result.channelId) setChannelId(result.channelId);
+      setError(result.error);
+      setLoading(false);
+      return;
     }
+
+    // Optimistic local append (realtime will dedupe)
+    if (result.message) {
+      const msg = result.message as any;
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [
+          ...prev,
+          {
+            id: msg.id,
+            channel_id: conversationId,
+            author_id: msg.author_id,
+            content: msg.content,
+            created_at: msg.created_at,
+            edited_at: msg.edited_at ?? null,
+            deleted_at: msg.deleted_at ?? null,
+            author: {
+              id: currentUserId,
+              username: "you",
+              display_name: "You",
+              avatar_url: null,
+            },
+          },
+        ];
+      });
+    }
+
+    setText("");
     setLoading(false);
   }
 
   return (
-    <>
+    <div className="flex-1 flex flex-col min-h-0">
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 && (
-          <p className="text-center text-sm text-muted-foreground py-8">
-            No messages yet. Say hi!
+          <p className="text-center text-sm text-muted-foreground py-12">
+            No messages yet. Say hello!
           </p>
         )}
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex gap-2 ${msg.author_id === currentUserId ? "justify-end" : ""}`}
-          >
+        {messages.map((msg) => {
+          const mine = msg.author_id === currentUserId;
+          return (
             <div
-              className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
-                msg.author_id === currentUserId
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card border border-border"
-              }`}
+              key={msg.id}
+              className={`flex gap-2 ${mine ? "justify-end" : "justify-start"}`}
             >
-              <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-              <p
-                className={`text-[10px] mt-1 ${
-                  msg.author_id === currentUserId
-                    ? "text-primary-foreground/70"
-                    : "text-muted-foreground"
+              <div
+                className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                  mine
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card border border-border"
                 }`}
               >
-                {new Date(msg.created_at).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </p>
+                {!mine && (
+                  <p className="text-[11px] font-semibold opacity-70 mb-0.5">
+                    {msg.author?.display_name || msg.author?.username || "User"}
+                  </p>
+                )}
+                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                <p
+                  className={`text-[10px] mt-1 ${
+                    mine ? "opacity-70" : "text-muted-foreground"
+                  }`}
+                >
+                  {new Date(msg.created_at).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={bottomRef} />
       </div>
 
-      <form
-        onSubmit={handleSend}
-        className="p-3 border-t border-border flex gap-2 items-end"
-      >
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          placeholder="Message…"
-          rows={1}
-          className="flex-1 px-3 py-2.5 rounded-xl bg-background border border-input text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-          disabled={loading}
-        />
-        <button
-          type="submit"
-          disabled={loading || !content.trim()}
-          className="p-2.5 rounded-xl bg-primary text-primary-foreground disabled:opacity-40"
-        >
-          {loading ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <Send className="w-5 h-5" />
-          )}
-        </button>
-      </form>
-    </>
+      <div className="p-3 border-t border-border">
+        {error && (
+          <p className="text-xs text-destructive mb-2 px-1">{error}</p>
+        )}
+        <form onSubmit={handleSend} className="flex gap-2">
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Message…"
+            className="flex-1 px-3 py-2.5 rounded-xl bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            disabled={loading}
+          />
+          <button
+            type="submit"
+            disabled={loading || !text.trim()}
+            className="p-2.5 rounded-xl bg-primary text-primary-foreground disabled:opacity-40"
+          >
+            {loading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
