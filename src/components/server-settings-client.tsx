@@ -5,6 +5,7 @@ import { createRole } from "@/app/actions/roles";
 import { createClient } from "@/lib/supabase/client";
 import { InviteButton } from "@/components/invite-button";
 import { CreateChannelButton } from "@/components/create-channel-button";
+import { CreateVoiceChannelButton } from "@/components/create-voice-channel-button";
 import { Loader2 } from "lucide-react";
 
 export function ServerSettingsClient({
@@ -60,6 +61,7 @@ export function ServerSettingsClient({
           <h2 className="font-semibold">Quick actions</h2>
           <div className="flex flex-wrap gap-3 items-center">
             <CreateChannelButton serverId={serverId} />
+            <CreateVoiceChannelButton serverId={serverId} />
             <InviteButton serverId={serverId} />
           </div>
         </div>
