@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { sendDMMessage } from "@/app/actions/dm-messages";
+import { sendDMMessage, pollDMMessages } from "@/app/actions/dm-messages";
 import { createClient } from "@/lib/supabase/client";
 import type { Message } from "@/lib/types";
 import { Loader2, Send } from "lucide-react";
@@ -31,7 +31,19 @@ export function DMChat({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Realtime on shared dm_messages table
+  function mergeMessages(incoming: Message[]) {
+    setMessages((prev) => {
+      const map = new Map<string, Message>();
+      for (const m of prev) map.set(m.id, m);
+      for (const m of incoming) map.set(m.id, m);
+      return Array.from(map.values()).sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+    });
+  }
+
+  // Realtime + 3s poll fallback so both sides always sync
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
@@ -46,35 +58,41 @@ export function DMChat({
         },
         async (payload) => {
           const row = payload.new as any;
-          if (messages.some((m) => m.id === row.id)) return;
-
           const { data: profile } = await supabase
             .from("profiles")
             .select("id, username, display_name, avatar_url")
             .eq("id", row.author_id)
             .single();
 
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === row.id)) return prev;
-            return [
-              ...prev,
-              {
-                id: row.id,
-                channel_id: conversationId,
-                author_id: row.author_id,
-                content: row.content,
-                created_at: row.created_at,
-                edited_at: row.edited_at,
-                deleted_at: row.deleted_at,
-                author: profile || undefined,
-              },
-            ];
-          });
+          mergeMessages([
+            {
+              id: row.id,
+              channel_id: conversationId,
+              author_id: row.author_id,
+              content: row.content,
+              created_at: row.created_at,
+              edited_at: row.edited_at,
+              deleted_at: row.deleted_at,
+              author: profile || undefined,
+            },
+          ]);
         }
       )
       .subscribe();
 
+    const interval = setInterval(async () => {
+      const latest = messages[messages.length - 1]?.created_at;
+      const fresh = await pollDMMessages(conversationId, latest);
+      if (fresh.length) mergeMessages(fresh as Message[]);
+    }, 3000);
+
+    // Initial full poll in case server render was empty
+    pollDMMessages(conversationId).then((all) => {
+      if (all.length) mergeMessages(all as Message[]);
+    });
+
     return () => {
+      clearInterval(interval);
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,30 +112,25 @@ export function DMChat({
       return;
     }
 
-    // Optimistic local append (realtime will dedupe)
     if (result.message) {
       const msg = result.message as any;
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === msg.id)) return prev;
-        return [
-          ...prev,
-          {
-            id: msg.id,
-            channel_id: conversationId,
-            author_id: msg.author_id,
-            content: msg.content,
-            created_at: msg.created_at,
-            edited_at: msg.edited_at ?? null,
-            deleted_at: msg.deleted_at ?? null,
-            author: {
-              id: currentUserId,
-              username: "you",
-              display_name: "You",
-              avatar_url: null,
-            },
+      mergeMessages([
+        {
+          id: msg.id,
+          channel_id: conversationId,
+          author_id: msg.author_id,
+          content: msg.content,
+          created_at: msg.created_at,
+          edited_at: msg.edited_at ?? null,
+          deleted_at: msg.deleted_at ?? null,
+          author: {
+            id: currentUserId,
+            username: "you",
+            display_name: "You",
+            avatar_url: null,
           },
-        ];
-      });
+        },
+      ]);
     }
 
     setText("");
