@@ -1,0 +1,58 @@
+{
+  "name": "opencircle-desktop",
+  "version": "1.0.0",
+  "description": "OpenCircle native desktop client",
+  "main": "main.js",
+  "author": "OpenCircle",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis portable --x64",
+    "dist:mac": "electron-builder --mac pkg zip --x64 --arm64",
+    "dist:linux": "electron-builder --linux AppImage"
+  },
+  "build": {
+    "appId": "app.opencircle.desktop",
+    "productName": "OpenCircle",
+    "copyright": "Copyright © OpenCircle",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "assets/**/*"],
+    "extraMetadata": { "main": "main.js" },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "artifactName": "OpenCircle-${version}-Windows.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OpenCircle"
+    },
+    "mac": {
+      "target": [
+        { "target": "pkg", "arch": ["universal"] },
+        { "target": "zip", "arch": ["universal"] }
+      ],
+      "artifactName": "OpenCircle-${version}-macOS.${ext}",
+      "category": "public.app-category.social-networking",
+      "identity": null
+    },
+    "pkg": {
+      "installLocation": "/Applications",
+      "allowAnywhere": true
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Network",
+      "artifactName": "OpenCircle-${version}-Linux.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  }
+}

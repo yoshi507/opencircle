@@ -1,0 +1,16 @@
+{
+  "appId": "app.opencircle.mobile",
+  "appName": "OpenCircle",
+  "webDir": "www",
+  "server": {
+    "url": "https://opencircle-lol-creative.vercel.app/app",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "preferredContentMode": "mobile"
+  }
+}

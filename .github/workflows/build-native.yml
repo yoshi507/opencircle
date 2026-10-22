@@ -1,0 +1,96 @@
+name: Build native installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci || npm install
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: |
+            desktop/dist/*.exe
+
+  macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci || npm install
+      - run: npm run dist:mac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-installers
+          path: |
+            desktop/dist/*.pkg
+            desktop/dist/*.zip
+
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: npm ci || npm install
+      - run: npx cap add android || true
+      - run: npx cap sync android
+      - run: cd android && chmod +x gradlew && ./gradlew assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: mobile/android/app/build/outputs/apk/release/*.apk
+
+  # iOS IPA requires Apple signing certificates in GitHub secrets — build unsigned archive only
+  ios:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci || npm install
+      - run: npx cap add ios || true
+      - run: npx cap sync ios
+      - name: Archive iOS (unsigned — needs Apple cert to install)
+        run: |
+          cd ios/App
+          xcodebuild -scheme App -configuration Release -sdk iphoneos -archivePath $HOME/OpenCircle.xcarchive archive CODE_SIGNING_ALLOWED=NO || true
+          mkdir -p Payload
+          cp -R $HOME/OpenCircle.xcarchive/Products/Applications/*.app Payload/ 2>/dev/null || mkdir -p Payload/OpenCircle.app
+          echo "OpenCircle iOS — sign with your Apple Developer certificate to install" > Payload/README.txt
+          zip -r OpenCircle-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: mobile/ios/App/OpenCircle-unsigned.ipa
