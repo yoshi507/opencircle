@@ -25,16 +25,34 @@ export async function getMessages(channelId: string, limit = 50) {
     .maybeSingle();
   if (!membership) return [];
 
-  const { data, error } = await supabase
+  // Prefer excluding thread replies; fall back if parent_id column not migrated yet
+  let query = supabase
     .from("messages")
     .select(
-      `id, channel_id, author_id, content, created_at, edited_at, deleted_at,
+      `id, channel_id, author_id, content, created_at, edited_at, deleted_at, parent_id,
        profiles:author_id (id, username, display_name, avatar_url)`
     )
     .eq("channel_id", channelId)
     .is("deleted_at", null)
     .order("created_at", { ascending: true })
     .limit(limit);
+
+  let { data, error } = await query.is("parent_id", null);
+
+  if (error && /parent_id/i.test(error.message)) {
+    const fallback = await supabase
+      .from("messages")
+      .select(
+        `id, channel_id, author_id, content, created_at, edited_at, deleted_at,
+         profiles:author_id (id, username, display_name, avatar_url)`
+      )
+      .eq("channel_id", channelId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true })
+      .limit(limit);
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     console.error(error);
@@ -141,7 +159,6 @@ export async function deleteMessage(messageId: string) {
 
   if (!msg) return { error: "Message not found." };
 
-  // Author or server owner can delete
   let allowed = msg.author_id === user.id;
   if (!allowed) {
     const { data: channel } = await supabase
