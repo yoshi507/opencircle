@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getServerRoles } from "@/app/actions/roles";
 import { getAuditLogs } from "@/app/actions/moderation";
+import { listWebhooks } from "@/app/actions/webhooks";
 import { ServerSettingsClient } from "@/components/server-settings-client";
 
 export default async function ServerSettingsPage({
@@ -32,12 +33,14 @@ export default async function ServerSettingsPage({
 
   const roles = await getServerRoles(serverId);
   const logs = await getAuditLogs(serverId);
+  const webhooks = await listWebhooks(serverId);
 
   return (
     <ServerSettingsClient
       server={server}
       roles={roles}
       auditLogs={logs}
+      webhooks={webhooks as any}
       serverId={serverId}
     />
   );
