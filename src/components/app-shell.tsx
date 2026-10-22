@@ -15,6 +15,7 @@ import {
   Volume2,
   Compass,
   Search,
+  Code2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -70,12 +71,11 @@ export function AppShell({ children, user }: AppShellProps) {
         return;
       }
       const supabase = createClient();
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("channels")
         .select("id, name, server_id, type")
         .eq("server_id", currentServerId)
         .order("position", { ascending: true });
-      if (error) console.error("channels load", error);
       setChannels(data || []);
     }
     loadChannels();
@@ -276,7 +276,20 @@ export function AppShell({ children, user }: AppShellProps) {
             )}
           </div>
 
-          <div className="p-2 border-t border-border">
+          <div className="p-2 border-t border-border space-y-1">
+            <Link
+              href="/app/developers"
+              onClick={() => setMobileOpen(false)}
+              className={cn(
+                "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm",
+                pathname.startsWith("/app/developers")
+                  ? "bg-accent text-foreground font-medium"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              )}
+            >
+              <Code2 className="w-4 h-4" />
+              Developers
+            </Link>
             <div className="flex items-center gap-2 p-2 rounded-lg">
               <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
                 {displayName.charAt(0).toUpperCase()}
@@ -321,10 +334,10 @@ export function AppShell({ children, user }: AppShellProps) {
           active={pathname.startsWith("/app/search")}
         />
         <BottomNavItem
-          href="/app/discover"
-          icon={<Compass className="w-5 h-5" />}
-          label="Discover"
-          active={pathname.startsWith("/app/discover")}
+          href="/app/developers"
+          icon={<Code2 className="w-5 h-5" />}
+          label="Dev"
+          active={pathname.startsWith("/app/developers")}
         />
         <button
           onClick={() => setMobileOpen(true)}
