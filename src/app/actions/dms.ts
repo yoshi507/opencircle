@@ -21,112 +21,65 @@ export async function getOrCreateDM(otherUserId: string) {
   if (!user) return { error: "Not signed in." };
   if (otherUserId === user.id) return { error: "Cannot DM yourself." };
 
-  // 1) Prefer atomic RPC (migration 011)
   const { data: rpcId, error: rpcError } = await supabase.rpc(
     "create_or_get_dm",
     { other_user_id: otherUserId }
   );
 
-  if (!rpcError && rpcId) {
-    const id = String(rpcId);
-    // Confirm we can see our membership (avoids "Conversation not found")
-    const { data: part } = await supabase
-      .from("dm_participants")
-      .select("user_id")
-      .eq("conversation_id", id)
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (part) return { conversationId: id };
-
-    // Membership invisible — try to add ourselves
-    await supabase.from("dm_participants").upsert({
-      conversation_id: id,
-      user_id: user.id,
-    });
-    return { conversationId: id };
+  if (rpcError) {
+    const msg = rpcError.message || "";
+    if (/NOT_AUTHENTICATED/i.test(msg)) return { error: "Not signed in." };
+    if (/INVALID_USER/i.test(msg)) return { error: "Invalid user." };
+    if (/USER_NOT_FOUND/i.test(msg)) return { error: "User not found." };
+    if (/BLOCKED/i.test(msg)) return { error: "Cannot message this user." };
+    if (/Could not find the function|schema cache|does not exist/i.test(msg)) {
+      return {
+        error:
+          "DM function missing. In Supabase SQL Editor run the full file 012_dm_nuclear_fix.sql",
+      };
+    }
+    return { error: msg };
   }
 
-  // 2) Fallback without RPC
-  const { data: blocked } = await supabase
-    .from("blocks")
-    .select("blocker_id")
-    .or(
-      `and(blocker_id.eq.${user.id},blocked_id.eq.${otherUserId}),and(blocker_id.eq.${otherUserId},blocked_id.eq.${user.id})`
-    )
-    .maybeSingle();
-  if (blocked) return { error: "Cannot message this user." };
+  if (!rpcId) return { error: "No conversation id returned." };
 
-  // Find existing
-  const { data: myParts } = await supabase
-    .from("dm_participants")
-    .select("conversation_id")
-    .eq("user_id", user.id);
+  const id = String(rpcId);
 
-  for (const row of myParts || []) {
-    const { data: other } = await supabase
-      .from("dm_participants")
-      .select("user_id")
-      .eq("conversation_id", row.conversation_id)
-      .eq("user_id", otherUserId)
-      .maybeSingle();
-    if (other) return { conversationId: row.conversation_id };
-  }
-
-  // Create conversation
-  const { data: convo, error: convoErr } = await supabase
-    .from("dm_conversations")
-    .insert({ type: "direct" })
-    .select("id")
-    .single();
-
-  if (convoErr || !convo) {
+  // Verify access via security-definer helper
+  const { data: ok } = await supabase.rpc("is_dm_member", { conv_id: id });
+  if (!ok) {
     return {
       error:
-        (rpcError?.message ? `RPC: ${rpcError.message}. ` : "") +
-        (convoErr?.message || "Failed to create conversation") +
-        ". Run 011_dm_create_rpc.sql in Supabase.",
+        "Created DM but membership check failed. Re-run 012_dm_nuclear_fix.sql in Supabase.",
     };
   }
 
-  // Self first, then other
-  const { error: e1 } = await supabase.from("dm_participants").insert({
-    conversation_id: convo.id,
-    user_id: user.id,
-  });
-  if (e1) {
-    return { error: `Could not join DM: ${e1.message}` };
-  }
-
-  const { error: e2 } = await supabase.from("dm_participants").insert({
-    conversation_id: convo.id,
-    user_id: otherUserId,
-  });
-  if (e2) {
-    // Still usable for you even if other insert fails (they'll need invite later)
-    console.error("other participant", e2.message);
-  }
-
-  return { conversationId: convo.id };
+  return { conversationId: id };
 }
 
-export async function assertDMAccess(conversationId: string) {
+export async function checkDMAccess(conversationId: string) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
+  if (!user) return { ok: false, error: "Not signed in." };
 
-  const { data: part } = await supabase
-    .from("dm_participants")
-    .select("user_id")
-    .eq("conversation_id", conversationId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const { data: ok, error } = await supabase.rpc("is_dm_member", {
+    conv_id: conversationId,
+  });
 
-  if (part) return { ok: true as const, userId: user.id };
+  if (error) {
+    // Fallback direct select
+    const { data: part } = await supabase
+      .from("dm_participants")
+      .select("user_id")
+      .eq("conversation_id", conversationId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    return { ok: !!part, error: part ? undefined : error.message };
+  }
 
-  return { ok: false as const, error: "Conversation not found." };
+  return { ok: !!ok };
 }
 
 export async function getMyDMs(): Promise<DMListItem[]> {
@@ -145,35 +98,20 @@ export async function getMyDMs(): Promise<DMListItem[]> {
 
   const results: DMListItem[] = [];
   for (const p of parts) {
-    const { data: others } = await supabase
-      .from("dm_participants")
-      .select(
-        `user_id, profiles:user_id (id, username, display_name, avatar_url)`
-      )
-      .eq("conversation_id", p.conversation_id)
-      .neq("user_id", user.id);
-
-    const profile = others?.[0]?.profiles as
-      | {
-          id: string;
-          username: string;
-          display_name: string;
-          avatar_url: string | null;
-        }
-      | {
-          id: string;
-          username: string;
-          display_name: string;
-          avatar_url: string | null;
-        }[]
-      | null
-      | undefined;
-
-    const other = Array.isArray(profile) ? profile[0] ?? null : profile ?? null;
-
+    const { data: peer } = await supabase.rpc("get_dm_peer", {
+      conv_id: p.conversation_id,
+    });
+    const row = Array.isArray(peer) ? peer[0] : peer;
     results.push({
       conversationId: p.conversation_id,
-      other,
+      other: row
+        ? {
+            id: row.id,
+            username: row.username,
+            display_name: row.display_name,
+            avatar_url: row.avatar_url,
+          }
+        : null,
     });
   }
   return results;
