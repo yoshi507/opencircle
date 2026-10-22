@@ -3,8 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
-
-export const BUILTIN_BOT_ID = "00000000-0000-4000-8000-000000000001";
+import { BUILTIN_BOT_ID } from "@/lib/bot-constants";
 
 /** Respond as the built-in OpenCircle bot when a command is detected. */
 export async function tryBuiltinBotReply(
@@ -29,12 +28,12 @@ export async function tryBuiltinBotReply(
         "`!help` — this list",
         "`!ping` — latency check",
         "`!serverinfo` — server details",
-        "`!userinfo [@user]` — profile info",
+        "`!userinfo` — profile info",
         "`!8ball <question>` — magic 8-ball",
         "`!coinflip` — heads or tails",
         "`!dice [sides]` — roll a die (default 6)",
         "`!poll <question>` — quick poll",
-        "`!remind <mins> <text>` — reminder text (local note)",
+        "`!remind <mins> <text>` — reminder note",
         "`!mod` — moderation tips",
         "`!ai <prompt>` — short AI-style reply",
       ].join("\n");
@@ -77,7 +76,7 @@ export async function tryBuiltinBotReply(
       const note = args.slice(1).join(" ");
       reply =
         mins > 0 && note
-          ? `⏰ Reminder set for ~${mins} min: “${note}” (client-side note — check back later!)`
+          ? `⏰ Reminder set for ~${mins} min: “${note}” (note it down — local reminder)`
           : "Usage: `!remind 10 take a break`";
       break;
     }
@@ -99,7 +98,7 @@ export async function tryBuiltinBotReply(
       reply = await serverInfo(channelId);
       break;
     case "userinfo":
-      reply = await userInfo(authorId, argStr);
+      reply = await userInfo(authorId);
       break;
     default:
       return null;
@@ -108,7 +107,6 @@ export async function tryBuiltinBotReply(
   if (!reply) return null;
 
   const supabase = await createClient();
-  // Ensure bot profile exists
   await supabase.from("profiles").upsert(
     {
       id: BUILTIN_BOT_ID,
@@ -132,8 +130,6 @@ export async function tryBuiltinBotReply(
 
   if (error) {
     console.error("bot reply", error);
-    // Bot profile may not exist in auth.users — insert as system via service role not available
-    // Fallback: return reply text for client to show as ephemeral
     return { ephemeral: reply, error: error.message };
   }
 
@@ -155,7 +151,8 @@ async function simpleAi(prompt: string) {
           messages: [
             {
               role: "system",
-              content: "You are OpenCircle, a helpful community bot. Keep answers under 80 words.",
+              content:
+                "You are OpenCircle, a helpful community bot. Keep answers under 80 words.",
             },
             { role: "user", content: prompt.slice(0, 500) },
           ],
@@ -203,7 +200,7 @@ async function serverInfo(channelId: string) {
   ].join("\n");
 }
 
-async function userInfo(authorId: string, _arg: string) {
+async function userInfo(authorId: string) {
   const supabase = await createClient();
   const { data: profile } = await supabase
     .from("profiles")

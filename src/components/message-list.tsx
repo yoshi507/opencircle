@@ -11,6 +11,7 @@ import { getThreadReplies, sendThreadReply } from "@/app/actions/threads";
 import { summarizeChannel } from "@/app/actions/summarize";
 import type { Message, Profile } from "@/lib/types";
 import { BotBadge } from "@/components/bot-badge";
+import { BUILTIN_BOT_ID } from "@/lib/bot-constants";
 import {
   Pencil,
   Trash2,
@@ -21,12 +22,11 @@ import {
 } from "lucide-react";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "🎉"];
-const BOT_ID = "00000000-0000-4000-8000-000000000001";
 
 function isBotAuthor(msg: Message) {
   return (
     msg.author?.is_bot === true ||
-    msg.author_id === BOT_ID ||
+    msg.author_id === BUILTIN_BOT_ID ||
     msg.author?.username === "opencircle"
   );
 }
@@ -59,7 +59,6 @@ export function MessageList({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Ephemeral bot replies when DB insert isn't possible
   useEffect(() => {
     function onBot(e: Event) {
       const detail = (e as CustomEvent).detail as {
@@ -72,13 +71,13 @@ export function MessageList({
         {
           id: `bot-${Date.now()}`,
           channel_id: channelId,
-          author_id: BOT_ID,
+          author_id: BUILTIN_BOT_ID,
           content: detail.content,
           created_at: new Date().toISOString(),
           edited_at: null,
           deleted_at: null,
           author: {
-            id: BOT_ID,
+            id: BUILTIN_BOT_ID,
             username: "opencircle",
             display_name: "OpenCircle",
             avatar_url: null,
