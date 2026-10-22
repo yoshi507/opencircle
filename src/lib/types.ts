@@ -6,6 +6,7 @@ export type Profile = {
   bio?: string | null;
   status?: string;
   created_at?: string;
+  is_bot?: boolean;
 };
 
 export type Server = {
