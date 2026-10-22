@@ -1,105 +1,59 @@
 # OpenCircle
 
-A free, modern community platform (Discord alternative) built with Next.js, Supabase and Vercel.
+A free, modern community platform (Discord alternative) built with Next.js, Supabase, LiveKit and Vercel.
 
-**Current status: Milestone 0 — Foundation** ✅
+## Status
 
-- ✅ Project scaffold (Next.js 15 + TypeScript + Tailwind)
-- ✅ Supabase Auth (email + password)
-- ✅ Protected `/app` routes + middleware
-- ✅ Landing page, login, register
-- ✅ App shell (server rail + sidebar + main area)
-- ✅ Initial database schema + RLS skeleton
-- ✅ Ready for Vercel deployment
+| Milestone | Focus | Status |
+|-----------|--------|--------|
+| 0 | Foundation, auth, shell | ✅ |
+| 1 | Servers, channels, messages, DMs | ✅ |
+| 2 | Invites, moderation, audit | ✅ |
+| 3 | Voice / video (LiveKit) | ✅ |
+| 4 | Search, threads, AI summaries | ✅ |
+| 5 | Webhooks, security, launch | ✅ |
 
----
+## Stack
 
-## Quick start
-
-### 1. Create a Supabase project
-
-1. Go to [supabase.com](https://supabase.com) → New project
-2. Copy the **Project URL** and **anon public** key
-3. In the SQL Editor, paste and run the contents of  
-   `supabase/migrations/001_initial_schema.sql`
-4. (Recommended) In Authentication → Providers, disable “Confirm email” while developing so you can sign in immediately
-
-### 2. Local development
-
-```bash
-git clone https://github.com/yoshi507/opencircle.git
-cd opencircle
-cp .env.example .env.local
-# edit .env.local with your Supabase URL + anon key
-npm install
-npm run dev
-```
-
-Open http://localhost:3000
-
-### 3. Deploy to Vercel (recommended)
-
-1. Go to [vercel.com/new](https://vercel.com/new)
-2. Import the `yoshi507/opencircle` repository
-3. Add the two environment variables:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-4. Deploy 🚀
-
-Every push to `main` will auto-deploy a new version.
-
----
-
-## Project structure
-
-```
-src/
-├── app/
-│   ├── (auth)/          # login + register
-│   ├── app/             # protected application
-│   ├── layout.tsx
-│   └── page.tsx         # landing
-├── components/
-│   └── app-shell.tsx    # main UI chrome
-├── lib/
-│   ├── supabase/        # browser + server + middleware clients
-│   └── utils.ts
-└── middleware.ts        # session refresh + route protection
-supabase/
-└── migrations/          # SQL schema
-```
-
----
-
-## Roadmap (from the PRD)
-
-| Milestone | Target        | Focus                                      |
-|-----------|---------------|--------------------------------------------|
-| 0         | ✅ Done       | Foundation, auth, shell                    |
-| 1         | Weeks 2–3     | Servers, channels, roles, realtime messages, DMs |
-| 2         | Weeks 4–5     | Invites, moderation, audit logs            |
-| 3         | Weeks 6–8     | Voice / video (LiveKit)                    |
-| 4         | Weeks 9–10    | Search, threads, AI summaries, polish      |
-| 5         | Weeks 11–12   | Webhooks, security review, launch          |
-
----
-
-## Tech stack
-
-- **Frontend**: Next.js 15 (App Router) + TypeScript + Tailwind CSS v4
+- **Frontend**: Next.js 15 + TypeScript + Tailwind
 - **Auth / DB / Realtime**: Supabase
+- **Voice / video**: LiveKit
 - **Hosting**: Vercel
-- **Voice (later)**: LiveKit
 
----
+## Environment variables (Vercel)
 
-## Security notes (Milestone 0)
+Use short names (one underscore) so mobile Vercel UI works:
 
-- All secrets live in environment variables / Supabase dashboard — never in the client
-- Middleware refreshes the session on every request
-- `/app/*` routes are protected server-side
-- RLS is enabled on core tables (expand policies as features land)
+| Key | Purpose |
+|-----|----------|
+| `SB_URL` | Supabase project URL |
+| `SB_KEY` | Supabase anon key |
+| `LK_URL` | LiveKit `wss://…` URL |
+| `LK_KEY` | LiveKit API key |
+| `LK_SECRET` | LiveKit API secret |
+| `AI_KEY` | Optional OpenAI key for better channel summaries |
 
----
+## SQL migrations
 
-Built with ❤️ for real communities.
+Run in order in the Supabase SQL editor:
+
+1. `001_initial_schema.sql`
+2. `003_fix_rls_recursion.sql`
+3. `004_invites_rls.sql`
+4. `005_m1_m2_complete_rls.sql`
+5. `006_dms_roles_rls.sql`
+6. `007_discovery_rls.sql`
+7. `008_threads_search.sql` (or just `parent_id` on messages)
+8. `009_webhooks.sql`
+
+## Security (launch checklist)
+
+- RLS on all user data tables; membership checked before messages / voice tokens
+- Secrets only in env vars (`LK_*`, `SB_*`) — never in client bundles except public URL/key
+- Webhooks owner-only; secret returned once on create
+- Voice tokens issued server-side after membership check
+- Soft-delete messages; rate limit on client composer
+
+## License
+
+Built for real communities. Ship fewer features that work.

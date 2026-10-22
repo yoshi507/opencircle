@@ -3,21 +3,24 @@
 import { useState } from "react";
 import { createRole } from "@/app/actions/roles";
 import { setServerVisibility } from "@/app/actions/discovery";
+import { createWebhook, deleteWebhook } from "@/app/actions/webhooks";
 import { createClient } from "@/lib/supabase/client";
 import { InviteButton } from "@/components/invite-button";
 import { CreateChannelButton } from "@/components/create-channel-button";
 import { CreateVoiceChannelButton } from "@/components/create-voice-channel-button";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 
 export function ServerSettingsClient({
   server,
   roles: initialRoles,
   auditLogs,
+  webhooks: initialWebhooks = [],
   serverId,
 }: {
   server: any;
   roles: any[];
   auditLogs: any[];
+  webhooks?: any[];
   serverId: string;
 }) {
   const [roles, setRoles] = useState(initialRoles);
@@ -26,6 +29,9 @@ export function ServerSettingsClient({
   const [visibility, setVisibility] = useState(
     server.visibility === "public" ? "public" : "private"
   );
+  const [webhooks, setWebhooks] = useState(initialWebhooks);
+  const [hookUrl, setHookUrl] = useState("");
+  const [newSecret, setNewSecret] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -64,6 +70,30 @@ export function ServerSettingsClient({
       setVisibility(next);
       setMsg(next === "public" ? "Server is now public" : "Server is now private");
     }
+    setLoading(false);
+  }
+
+  async function handleCreateWebhook(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setNewSecret(null);
+    const result = await createWebhook(serverId, hookUrl);
+    if (result.error) {
+      setMsg(result.error);
+    } else if (result.webhook) {
+      setWebhooks((prev) => [result.webhook, ...prev]);
+      setHookUrl("");
+      setNewSecret(result.webhook.secret || null);
+      setMsg("Webhook created");
+    }
+    setLoading(false);
+  }
+
+  async function handleDeleteWebhook(id: string) {
+    if (!confirm("Delete this webhook?")) return;
+    setLoading(true);
+    await deleteWebhook(serverId, id);
+    setWebhooks((prev) => prev.filter((w) => w.id !== id));
     setLoading(false);
   }
 
@@ -132,6 +162,52 @@ export function ServerSettingsClient({
             Save
           </button>
         </form>
+
+        <div className="space-y-3">
+          <h2 className="font-semibold">Webhooks</h2>
+          <p className="text-sm text-muted-foreground">
+            Receive POST requests when events happen (e.g. new messages).
+          </p>
+          {webhooks.length > 0 && (
+            <ul className="space-y-1 text-sm">
+              {webhooks.map((w) => (
+                <li
+                  key={w.id}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border"
+                >
+                  <span className="truncate flex-1 font-mono text-xs">{w.url}</span>
+                  <button
+                    onClick={() => handleDeleteWebhook(w.id)}
+                    className="p-1 text-destructive hover:bg-accent rounded"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {newSecret && (
+            <p className="text-xs text-amber-400 break-all">
+              Secret (copy now): {newSecret}
+            </p>
+          )}
+          <form onSubmit={handleCreateWebhook} className="flex gap-2">
+            <input
+              value={hookUrl}
+              onChange={(e) => setHookUrl(e.target.value)}
+              placeholder="https://example.com/webhook"
+              required
+              className="flex-1 px-3 py-2 rounded-lg bg-background border border-input text-sm"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 bg-secondary rounded-lg text-sm font-medium"
+            >
+              Add
+            </button>
+          </form>
+        </div>
 
         <div className="space-y-3">
           <h2 className="font-semibold">Roles</h2>
