@@ -14,6 +14,7 @@ import {
   X,
   Volume2,
   Compass,
+  Search,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,11 @@ interface AppShellProps {
       display_name?: string;
     };
   };
+}
+
+function isVoiceChannel(ch: any) {
+  const t = (ch?.type || "").toString().toLowerCase();
+  return t === "voice" || t === "audio" || t === "vc";
 }
 
 export function AppShell({ children, user }: AppShellProps) {
@@ -64,11 +70,12 @@ export function AppShell({ children, user }: AppShellProps) {
         return;
       }
       const supabase = createClient();
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("channels")
         .select("id, name, server_id, type")
         .eq("server_id", currentServerId)
         .order("position", { ascending: true });
+      if (error) console.error("channels load", error);
       setChannels(data || []);
     }
     loadChannels();
@@ -198,6 +205,13 @@ export function AppShell({ children, user }: AppShellProps) {
                   active={pathname.startsWith("/app/discover")}
                   onClick={() => setMobileOpen(false)}
                 />
+                <NavItem
+                  href="/app/search"
+                  icon={<Search className="w-4 h-4" />}
+                  label="Search"
+                  active={pathname.startsWith("/app/search")}
+                  onClick={() => setMobileOpen(false)}
+                />
               </>
             )}
 
@@ -208,22 +222,25 @@ export function AppShell({ children, user }: AppShellProps) {
                     Channels
                   </p>
                 </div>
-                {channels.map((ch) => (
-                  <NavItem
-                    key={ch.id}
-                    href={`/app/servers/${currentServerId}/channels/${ch.id}`}
-                    icon={
-                      ch.type === "voice" ? (
-                        <Volume2 className="w-4 h-4" />
-                      ) : (
-                        <Hash className="w-4 h-4" />
-                      )
-                    }
-                    label={ch.name}
-                    active={pathname.includes(ch.id)}
-                    onClick={() => setMobileOpen(false)}
-                  />
-                ))}
+                {channels.map((ch) => {
+                  const voice = isVoiceChannel(ch);
+                  return (
+                    <NavItem
+                      key={ch.id}
+                      href={`/app/servers/${currentServerId}/channels/${ch.id}`}
+                      icon={
+                        voice ? (
+                          <Volume2 className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <Hash className="w-4 h-4" />
+                        )
+                      }
+                      label={ch.name}
+                      active={pathname.includes(ch.id)}
+                      onClick={() => setMobileOpen(false)}
+                    />
+                  );
+                })}
               </>
             )}
 
@@ -298,12 +315,10 @@ export function AppShell({ children, user }: AppShellProps) {
           active={pathname === "/app"}
         />
         <BottomNavItem
-          href="/app/friends"
-          icon={<Users className="w-5 h-5" />}
-          label="Friends"
-          active={
-            pathname.startsWith("/app/friends") || pathname.startsWith("/app/dms")
-          }
+          href="/app/search"
+          icon={<Search className="w-5 h-5" />}
+          label="Search"
+          active={pathname.startsWith("/app/search")}
         />
         <BottomNavItem
           href="/app/discover"
