@@ -12,6 +12,8 @@ import {
   Home,
   Menu,
   X,
+  Volume2,
+  Compass,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -64,7 +66,7 @@ export function AppShell({ children, user }: AppShellProps) {
       const supabase = createClient();
       const { data } = await supabase
         .from("channels")
-        .select("id, name, server_id")
+        .select("id, name, server_id, type")
         .eq("server_id", currentServerId)
         .order("position", { ascending: true });
       setChannels(data || []);
@@ -120,7 +122,6 @@ export function AppShell({ children, user }: AppShellProps) {
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
-        {/* Server rail (icons only) */}
         <div className="w-[72px] flex-shrink-0 bg-[#0c0c0e] flex flex-col items-center py-3 gap-2 border-r border-border overflow-y-auto">
           <Link
             href="/app"
@@ -157,7 +158,6 @@ export function AppShell({ children, user }: AppShellProps) {
           <CreateServerButton />
         </div>
 
-        {/* Secondary sidebar */}
         <div className="w-60 flex-shrink-0 bg-card border-r border-border flex flex-col">
           <div className="h-12 px-4 flex items-center justify-between border-b border-border">
             <span className="font-semibold truncate">
@@ -191,6 +191,13 @@ export function AppShell({ children, user }: AppShellProps) {
                   }
                   onClick={() => setMobileOpen(false)}
                 />
+                <NavItem
+                  href="/app/discover"
+                  icon={<Compass className="w-4 h-4" />}
+                  label="Discover"
+                  active={pathname.startsWith("/app/discover")}
+                  onClick={() => setMobileOpen(false)}
+                />
               </>
             )}
 
@@ -205,7 +212,13 @@ export function AppShell({ children, user }: AppShellProps) {
                   <NavItem
                     key={ch.id}
                     href={`/app/servers/${currentServerId}/channels/${ch.id}`}
-                    icon={<Hash className="w-4 h-4" />}
+                    icon={
+                      ch.type === "voice" ? (
+                        <Volume2 className="w-4 h-4" />
+                      ) : (
+                        <Hash className="w-4 h-4" />
+                      )
+                    }
                     label={ch.name}
                     active={pathname.includes(ch.id)}
                     onClick={() => setMobileOpen(false)}
@@ -292,6 +305,12 @@ export function AppShell({ children, user }: AppShellProps) {
             pathname.startsWith("/app/friends") || pathname.startsWith("/app/dms")
           }
         />
+        <BottomNavItem
+          href="/app/discover"
+          icon={<Compass className="w-5 h-5" />}
+          label="Discover"
+          active={pathname.startsWith("/app/discover")}
+        />
         <button
           onClick={() => setMobileOpen(true)}
           className="flex flex-col items-center gap-0.5 text-muted-foreground"
@@ -299,12 +318,6 @@ export function AppShell({ children, user }: AppShellProps) {
           <Hash className="w-5 h-5" />
           <span className="text-[10px]">Channels</span>
         </button>
-        <BottomNavItem
-          href="/app/settings"
-          icon={<Settings className="w-5 h-5" />}
-          label="Settings"
-          active={pathname.startsWith("/app/settings")}
-        />
       </nav>
     </div>
   );

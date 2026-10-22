@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createRole } from "@/app/actions/roles";
+import { setServerVisibility } from "@/app/actions/discovery";
 import { createClient } from "@/lib/supabase/client";
 import { InviteButton } from "@/components/invite-button";
 import { CreateChannelButton } from "@/components/create-channel-button";
@@ -22,6 +23,9 @@ export function ServerSettingsClient({
   const [roles, setRoles] = useState(initialRoles);
   const [roleName, setRoleName] = useState("");
   const [rules, setRules] = useState(server.description || "");
+  const [visibility, setVisibility] = useState(
+    server.visibility === "public" ? "public" : "private"
+  );
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -51,6 +55,18 @@ export function ServerSettingsClient({
     setLoading(false);
   }
 
+  async function handleVisibility(next: "public" | "private") {
+    setLoading(true);
+    const result = await setServerVisibility(serverId, next);
+    if (result.error) {
+      setMsg(result.error);
+    } else {
+      setVisibility(next);
+      setMsg(next === "public" ? "Server is now public" : "Server is now private");
+    }
+    setLoading(false);
+  }
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-xl space-y-10">
@@ -63,6 +79,39 @@ export function ServerSettingsClient({
             <CreateChannelButton serverId={serverId} />
             <CreateVoiceChannelButton serverId={serverId} />
             <InviteButton serverId={serverId} />
+          </div>
+        </div>
+
+        <div className="space-y-3 p-4 rounded-xl border border-border bg-card">
+          <h2 className="font-semibold">Visibility</h2>
+          <p className="text-sm text-muted-foreground">
+            Public servers appear on the Discover page so anyone can join.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={loading || visibility === "private"}
+              onClick={() => handleVisibility("private")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                visibility === "private"
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border hover:bg-accent"
+              }`}
+            >
+              Private
+            </button>
+            <button
+              type="button"
+              disabled={loading || visibility === "public"}
+              onClick={() => handleVisibility("public")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                visibility === "public"
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border hover:bg-accent"
+              }`}
+            >
+              Public
+            </button>
           </div>
         </div>
 
