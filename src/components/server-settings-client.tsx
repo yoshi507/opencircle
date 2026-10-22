@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { createRole } from "@/app/actions/roles";
 import { createClient } from "@/lib/supabase/client";
+import { InviteButton } from "@/components/invite-button";
+import { CreateChannelButton } from "@/components/create-channel-button";
 import { Loader2 } from "lucide-react";
 
 export function ServerSettingsClient({
@@ -51,7 +53,16 @@ export function ServerSettingsClient({
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-xl space-y-10">
-        <h1 className="text-2xl font-bold">Server settings — {server.name}</h1>
+        <h1 className="text-2xl font-bold">Server settings</h1>
+        <p className="text-muted-foreground -mt-6">{server.name}</p>
+
+        <div className="space-y-3 p-4 rounded-xl border border-border bg-card">
+          <h2 className="font-semibold">Quick actions</h2>
+          <div className="flex flex-wrap gap-3 items-center">
+            <CreateChannelButton serverId={serverId} />
+            <InviteButton serverId={serverId} />
+          </div>
+        </div>
 
         <form onSubmit={handleSaveRules} className="space-y-3">
           <h2 className="font-semibold">Rules / description</h2>
@@ -75,7 +86,10 @@ export function ServerSettingsClient({
           <h2 className="font-semibold">Roles</h2>
           <ul className="space-y-1 text-sm">
             {roles.map((r) => (
-              <li key={r.id} className="px-3 py-2 rounded-lg bg-card border border-border">
+              <li
+                key={r.id}
+                className="px-3 py-2 rounded-lg bg-card border border-border"
+              >
                 {r.name}
               </li>
             ))}
@@ -116,7 +130,9 @@ export function ServerSettingsClient({
                   <span>
                     <strong>{log.action}</strong> → {log.target_id?.slice(0, 8)}…
                     {log.metadata?.reason && (
-                      <span className="text-muted-foreground"> — {log.metadata.reason}</span>
+                      <span className="text-muted-foreground">
+                        {" "}— {log.metadata.reason}
+                      </span>
                     )}
                   </span>
                   <span className="text-xs text-muted-foreground shrink-0">
