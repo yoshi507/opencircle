@@ -1,20 +1,227 @@
 "use server";
 
-import { randomBytes } from "crypto";
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { SYSTEM_BOT_ID } from "@/lib/bot-engine";
+import { revalidatePath } from "next/cache";
+import { randomBytes } from "crypto";
 
-function clientId() {
-  return "oc" + randomBytes(8).toString("hex");
+export const BUILTIN_BOT_ID = "00000000-0000-4000-8000-000000000001";
+
+/** Respond as the built-in OpenCircle bot when a command is detected. */
+export async function tryBuiltinBotReply(
+  channelId: string,
+  content: string,
+  authorId: string
+) {
+  const text = content.trim();
+  if (!text.startsWith("!") && !text.startsWith("/")) return null;
+
+  const without = text.slice(1).trim();
+  const [cmdRaw, ...args] = without.split(/\s+/);
+  const cmd = (cmdRaw || "").toLowerCase();
+  const argStr = args.join(" ");
+
+  let reply: string | null = null;
+
+  switch (cmd) {
+    case "help":
+      reply = [
+        "**OpenCircle Bot** — commands",
+        "`!help` — this list",
+        "`!ping` — latency check",
+        "`!serverinfo` — server details",
+        "`!userinfo [@user]` — profile info",
+        "`!8ball <question>` — magic 8-ball",
+        "`!coinflip` — heads or tails",
+        "`!dice [sides]` — roll a die (default 6)",
+        "`!poll <question>` — quick poll",
+        "`!remind <mins> <text>` — reminder text (local note)",
+        "`!mod` — moderation tips",
+        "`!ai <prompt>` — short AI-style reply",
+      ].join("\n");
+      break;
+    case "ping":
+      reply = "Pong! 🏓";
+      break;
+    case "8ball": {
+      const answers = [
+        "Yes.",
+        "No.",
+        "Ask again later.",
+        "Definitely.",
+        "I wouldn't count on it.",
+        "Signs point to yes.",
+        "Outlook not so good.",
+        "Without a doubt.",
+      ];
+      reply = argStr
+        ? `🎱 ${answers[Math.floor(Math.random() * answers.length)]}`
+        : "Ask a question: `!8ball will it rain?`";
+      break;
+    }
+    case "coinflip":
+      reply = Math.random() < 0.5 ? "🪙 Heads" : "🪙 Tails";
+      break;
+    case "dice": {
+      const sides = Math.min(100, Math.max(2, parseInt(args[0] || "6", 10) || 6));
+      const roll = 1 + Math.floor(Math.random() * sides);
+      reply = `🎲 You rolled **${roll}** (d${sides})`;
+      break;
+    }
+    case "poll":
+      reply = argStr
+        ? `📊 **Poll:** ${argStr}\nReact with 👍 or 👎`
+        : "Usage: `!poll Should we add cats?`";
+      break;
+    case "remind": {
+      const mins = parseInt(args[0] || "", 10);
+      const note = args.slice(1).join(" ");
+      reply =
+        mins > 0 && note
+          ? `⏰ Reminder set for ~${mins} min: “${note}” (client-side note — check back later!)`
+          : "Usage: `!remind 10 take a break`";
+      break;
+    }
+    case "mod":
+      reply = [
+        "**Moderation tips**",
+        "• Use Server settings → roles & audit log",
+        "• Kick/timeout members from the members panel (owner)",
+        "• Keep invites private unless the server is public",
+        "• Report abuse with clear evidence",
+      ].join("\n");
+      break;
+    case "ai":
+      reply = argStr
+        ? await simpleAi(argStr)
+        : "Usage: `!ai explain RLS in one sentence`";
+      break;
+    case "serverinfo":
+      reply = await serverInfo(channelId);
+      break;
+    case "userinfo":
+      reply = await userInfo(authorId, argStr);
+      break;
+    default:
+      return null;
+  }
+
+  if (!reply) return null;
+
+  const supabase = await createClient();
+  // Ensure bot profile exists
+  await supabase.from("profiles").upsert(
+    {
+      id: BUILTIN_BOT_ID,
+      username: "opencircle",
+      display_name: "OpenCircle",
+      is_bot: true,
+      bio: "Official bot",
+    },
+    { onConflict: "id" }
+  );
+
+  const { data: message, error } = await supabase
+    .from("messages")
+    .insert({
+      channel_id: channelId,
+      author_id: BUILTIN_BOT_ID,
+      content: reply,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("bot reply", error);
+    // Bot profile may not exist in auth.users — insert as system via service role not available
+    // Fallback: return reply text for client to show as ephemeral
+    return { ephemeral: reply, error: error.message };
+  }
+
+  return { message };
 }
 
-function secret() {
-  return randomBytes(24).toString("hex");
+async function simpleAi(prompt: string) {
+  const key = process.env.AI_KEY || process.env.OPENAI_API_KEY;
+  if (key) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are OpenCircle, a helpful community bot. Keep answers under 80 words.",
+            },
+            { role: "user", content: prompt.slice(0, 500) },
+          ],
+          max_tokens: 150,
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return json.choices?.[0]?.message?.content || "…";
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  return `🤖 (offline AI) You asked: “${prompt.slice(0, 120)}”. Add AI_KEY in Vercel for full answers.`;
 }
 
-function botToken() {
-  return "oct_" + randomBytes(32).toString("hex");
+async function serverInfo(channelId: string) {
+  const supabase = await createClient();
+  const { data: channel } = await supabase
+    .from("channels")
+    .select("server_id, name")
+    .eq("id", channelId)
+    .single();
+  if (!channel) return "Channel not found.";
+
+  const { data: server } = await supabase
+    .from("servers")
+    .select("name, description, visibility, created_at")
+    .eq("id", channel.server_id)
+    .single();
+
+  const { count } = await supabase
+    .from("server_members")
+    .select("*", { count: "exact", head: true })
+    .eq("server_id", channel.server_id)
+    .eq("membership_status", "active");
+
+  return [
+    `**${server?.name || "Server"}**`,
+    server?.description || "_No description_",
+    `Visibility: ${server?.visibility || "private"}`,
+    `Members: ${count ?? "?"}`,
+    `Channel: #${channel.name}`,
+  ].join("\n");
+}
+
+async function userInfo(authorId: string, _arg: string) {
+  const supabase = await createClient();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("username, display_name, bio, created_at, is_bot")
+    .eq("id", authorId)
+    .single();
+
+  if (!profile) return "User not found.";
+  return [
+    `**${profile.display_name || profile.username}** (@${profile.username})`,
+    profile.bio || "_No bio_",
+    profile.is_bot ? "Tag: BOT" : "Tag: User",
+    profile.created_at
+      ? `Joined: ${new Date(profile.created_at).toLocaleDateString()}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export async function listMyApps() {
@@ -27,7 +234,7 @@ export async function listMyApps() {
   const { data } = await supabase
     .from("applications")
     .select(
-      "id, name, description, icon_url, client_id, scopes, bot_user_id, created_at, updated_at"
+      "id, name, description, icon_url, client_id, scopes, bot_token, created_at, updated_at"
     )
     .eq("owner_id", user.id)
     .order("created_at", { ascending: false });
@@ -35,26 +242,13 @@ export async function listMyApps() {
   return data || [];
 }
 
-export async function getApp(appId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data } = await supabase
-    .from("applications")
-    .select("*")
-    .eq("id", appId)
-    .eq("owner_id", user.id)
-    .maybeSingle();
-
-  return data;
-}
-
-export async function createApp(name: string, description?: string) {
-  const cleaned = name.trim().slice(0, 80);
-  if (cleaned.length < 2) return { error: "Name must be at least 2 characters." };
+export async function createApp(form: {
+  name: string;
+  description?: string;
+  scopes?: string[];
+}) {
+  const name = form.name.trim().slice(0, 80);
+  if (!name) return { error: "Name required." };
 
   const supabase = await createClient();
   const {
@@ -62,41 +256,24 @@ export async function createApp(name: string, description?: string) {
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in." };
 
-  const botUsername =
-    cleaned
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, "_")
-      .slice(0, 24) || "bot";
-
-  // Create bot profile row (id must exist for FK — use random uuid)
-  const botUserId = crypto.randomUUID();
-
-  // profiles may require auth.users FK — try insert; if fails, still create app without bot_user_id
-  const { error: profileErr } = await supabase.from("profiles").insert({
-    id: botUserId,
-    username: `${botUsername}_${botUserId.slice(0, 4)}`,
-    display_name: cleaned,
-    is_bot: true,
-    status: "online",
-  });
-
-  const payload: Record<string, unknown> = {
-    owner_id: user.id,
-    name: cleaned,
-    description: description?.trim() || null,
-    client_id: clientId(),
-    client_secret: secret(),
-    bot_token: botToken(),
-    scopes: ["bot", "messages.read", "messages.write"],
-  };
-
-  if (!profileErr) {
-    payload.bot_user_id = botUserId;
-  }
+  const client_id = `oc${randomBytes(12).toString("hex")}`;
+  const client_secret = randomBytes(24).toString("hex");
+  const bot_token = `Bot.${randomBytes(32).toString("hex")}`;
+  const scopes = form.scopes?.length
+    ? form.scopes
+    : ["bot", "messages.read", "messages.write"];
 
   const { data, error } = await supabase
     .from("applications")
-    .insert(payload)
+    .insert({
+      owner_id: user.id,
+      name,
+      description: form.description?.trim() || null,
+      client_id,
+      client_secret,
+      bot_token,
+      scopes,
+    })
     .select()
     .single();
 
@@ -107,7 +284,7 @@ export async function createApp(name: string, description?: string) {
 
 export async function updateApp(
   appId: string,
-  fields: {
+  updates: {
     name?: string;
     description?: string;
     icon_url?: string;
@@ -120,55 +297,20 @@ export async function updateApp(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in." };
 
-  const updates: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
-  };
-  if (fields.name !== undefined) updates.name = fields.name.trim().slice(0, 80);
-  if (fields.description !== undefined)
-    updates.description = fields.description.trim() || null;
-  if (fields.icon_url !== undefined) updates.icon_url = fields.icon_url || null;
-  if (fields.scopes !== undefined) updates.scopes = fields.scopes;
-
   const { data, error } = await supabase
     .from("applications")
-    .update(updates)
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", appId)
     .eq("owner_id", user.id)
     .select()
     .single();
 
   if (error) return { error: error.message };
-
-  // Sync bot display name
-  if (data?.bot_user_id && fields.name) {
-    await supabase
-      .from("profiles")
-      .update({ display_name: fields.name.trim().slice(0, 80) })
-      .eq("id", data.bot_user_id);
-  }
-
   revalidatePath("/app/developers");
   return { app: data };
-}
-
-export async function regenerateToken(appId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in." };
-
-  const token = botToken();
-  const { data, error } = await supabase
-    .from("applications")
-    .update({ bot_token: token, updated_at: new Date().toISOString() })
-    .eq("id", appId)
-    .eq("owner_id", user.id)
-    .select("id, bot_token")
-    .single();
-
-  if (error) return { error: error.message };
-  return { token: data.bot_token };
 }
 
 export async function deleteApp(appId: string) {
@@ -189,25 +331,22 @@ export async function deleteApp(appId: string) {
   return { ok: true };
 }
 
-export async function postBotReply(
-  channelId: string,
-  content: string,
-  botUserId: string = SYSTEM_BOT_ID
-) {
+export async function regenerateBotToken(appId: string) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in." };
+
+  const bot_token = `Bot.${randomBytes(32).toString("hex")}`;
   const { data, error } = await supabase
-    .from("messages")
-    .insert({
-      channel_id: channelId,
-      author_id: botUserId,
-      content,
-    })
-    .select()
+    .from("applications")
+    .update({ bot_token, updated_at: new Date().toISOString() })
+    .eq("id", appId)
+    .eq("owner_id", user.id)
+    .select("bot_token")
     .single();
 
-  if (error) {
-    console.error("bot reply", error);
-    return { error: error.message };
-  }
-  return { message: data };
+  if (error) return { error: error.message };
+  return { bot_token: data.bot_token };
 }

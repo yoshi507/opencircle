@@ -31,6 +31,7 @@ export async function getOrCreateDM(otherUserId: string) {
 
   if (blocked) return { error: "Cannot message this user." };
 
+  // Find existing conversation with this user
   const { data: myConvos } = await supabase
     .from("dm_participants")
     .select("conversation_id")
@@ -50,18 +51,43 @@ export async function getOrCreateDM(otherUserId: string) {
     }
   }
 
+  // Create conversation
   const { data: convo, error } = await supabase
     .from("dm_conversations")
     .insert({ type: "direct" })
-    .select()
+    .select("id")
     .single();
 
-  if (error || !convo) return { error: error?.message || "Failed to create DM." };
+  if (error || !convo) {
+    return {
+      error:
+        error?.message ||
+        "Failed to create DM. Run migration 010_bots_dm_rls.sql in Supabase.",
+    };
+  }
 
-  await supabase.from("dm_participants").insert([
-    { conversation_id: convo.id, user_id: user.id },
-    { conversation_id: convo.id, user_id: otherUserId },
-  ]);
+  // Insert self first (required for policy that allows adding the other user)
+  const { error: selfErr } = await supabase.from("dm_participants").insert({
+    conversation_id: convo.id,
+    user_id: user.id,
+  });
+
+  if (selfErr) {
+    return { error: selfErr.message };
+  }
+
+  const { error: otherErr } = await supabase.from("dm_participants").insert({
+    conversation_id: convo.id,
+    user_id: otherUserId,
+  });
+
+  if (otherErr) {
+    return {
+      error:
+        otherErr.message +
+        " — update dm_participants RLS (migration 010).",
+    };
+  }
 
   return { conversationId: convo.id };
 }
@@ -91,8 +117,18 @@ export async function getMyDMs(): Promise<DMListItem[]> {
       .neq("user_id", user.id);
 
     const profile = others?.[0]?.profiles as
-      | { id: string; username: string; display_name: string; avatar_url: string | null }
-      | { id: string; username: string; display_name: string; avatar_url: string | null }[]
+      | {
+          id: string;
+          username: string;
+          display_name: string;
+          avatar_url: string | null;
+        }
+      | {
+          id: string;
+          username: string;
+          display_name: string;
+          avatar_url: string | null;
+        }[]
       | null
       | undefined;
 
