@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { tryBuiltinBotReply } from "@/app/actions/bots";
 
 export async function getMessages(channelId: string, limit = 50) {
   const supabase = await createClient();
@@ -25,14 +26,13 @@ export async function getMessages(channelId: string, limit = 50) {
     .maybeSingle();
   if (!membership) return [];
 
-  // Try with parent_id filter (threads); fall back if column missing
   let rows: any[] | null = null;
 
   const withParent = await supabase
     .from("messages")
     .select(
       `id, channel_id, author_id, content, created_at, edited_at, deleted_at, parent_id,
-       profiles:author_id (id, username, display_name, avatar_url)`
+       profiles:author_id (id, username, display_name, avatar_url, is_bot)`
     )
     .eq("channel_id", channelId)
     .is("deleted_at", null)
@@ -45,7 +45,7 @@ export async function getMessages(channelId: string, limit = 50) {
       .from("messages")
       .select(
         `id, channel_id, author_id, content, created_at, edited_at, deleted_at,
-         profiles:author_id (id, username, display_name, avatar_url)`
+         profiles:author_id (id, username, display_name, avatar_url, is_bot)`
       )
       .eq("channel_id", channelId)
       .is("deleted_at", null)
@@ -116,6 +116,15 @@ export async function sendMessage(channelId: string, content: string) {
 
   if (error) return { error: error.message };
 
+  // Built-in bot commands
+  if (trimmed.startsWith("!") || trimmed.startsWith("/")) {
+    try {
+      await tryBuiltinBotReply(channelId, trimmed, user.id);
+    } catch (e) {
+      console.error("bot", e);
+    }
+  }
+
   // Fire webhooks (non-blocking)
   void dispatchWebhooks(channel.server_id, "message.created", {
     channel_id: channelId,
@@ -160,19 +169,17 @@ async function dispatchWebhooks(
           headers: {
             "Content-Type": "application/json",
             "X-OpenCircle-Event": event,
-            ...(hook.secret
-              ? { "X-OpenCircle-Secret": hook.secret }
-              : {}),
+            ...(hook.secret ? { "X-OpenCircle-Secret": hook.secret } : {}),
           },
           body,
           signal: AbortSignal.timeout(5000),
         });
       } catch {
-        // ignore delivery failures
+        /* ignore */
       }
     }
   } catch {
-    // ignore
+    /* ignore */
   }
 }
 
